@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
     <Metadata>
-        <Identity Id="FileCopyExtension.6ad26557-5a0f-48f0-92fd-7e8b1fc871d7" Version="1.112" Language="en-US" Publisher="Hhe Libebcnof" />
+        <Identity Id="FileCopyExtension.6ad26557-5a0f-48f0-92fd-7e8b1fc871d7" Version="1.122" Language="en-US" Publisher="Hhe Libebcnof" />
         <DisplayName>FileCopyExtension</DisplayName>
         <Description xml:space="preserve">Copies files opened in editor tabs into a selected directoryCopies </Description>
     </Metadata>

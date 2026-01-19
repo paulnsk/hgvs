@@ -8,14 +8,13 @@
              Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
              Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"
              mc:Ignorable="d"
-             d:DesignHeight="300" d:DesignWidth="600"
+             d:DesignHeight="450" d:DesignWidth="600"
              Name="MyToolWindow">
 
     <UserControl.Resources>
-        <!-- Подключаем конвертер цветов -->
         <local:StatusToColorConverter x:Key="StatusColorConverter"/>
 
-        <!-- Стиль списка -->
+        <!-- Стиль для ListViewItem -->
         <Style TargetType="ListViewItem">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
@@ -54,34 +53,82 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- Стиль для RadioButton/CheckBox -->
+        <Style TargetType="Control" x:Key="OptionStyle">
+            <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
+            <Setter Property="Margin" Value="0,0,10,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
     </UserControl.Resources>
 
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <!-- Buttons -->
+            <RowDefinition Height="Auto"/>
+            <!-- Options (Radio + Check) -->
+            <RowDefinition Height="Auto"/>
+            <!-- Filter -->
+            <RowDefinition Height="Auto"/>
+            <!-- Status -->
             <RowDefinition Height="*"/>
+            <!-- List -->
         </Grid.RowDefinitions>
 
+        <!-- 1. Buttons -->
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="5">
             <Button Name="btnRefresh" Content="Refresh" Width="80" Height="25" Margin="0,0,5,0" Click="BtnRefresh_Click"/>
             <Button Name="btnOpenAll" Content="Open All" Width="80" Height="25" Click="BtnOpenAll_Click"/>
-
-            <TextBlock Name="txtStatusInfo" 
-                       Text="Ready" 
-                       VerticalAlignment="Center" 
-                       Margin="10,0,0,0" 
-                       Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"
-                       FontWeight="SemiBold"/>
         </StackPanel>
 
-        <ListView Name="lvFiles" Grid.Row="1" Margin="5" MouseDoubleClick="LvFiles_MouseDoubleClick" 
+        <!-- 2. Options -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="5,0,5,5">
+            <RadioButton Name="rbUncommitted" Content="Uncommitted Only" GroupName="Mode" IsChecked="True" 
+                         Checked="Mode_Checked" Style="{StaticResource OptionStyle}"/>
+            <RadioButton Name="rbBranch" Content="Entire Branch (vs Parent)" GroupName="Mode" 
+                         Checked="Mode_Checked" Style="{StaticResource OptionStyle}"/>
+
+            <!-- Новый чекбокс -->
+            <CheckBox Name="chkShowUntracked" Content="Show Untracked (?)" 
+                      Checked="CheckBox_Checked" Unchecked="CheckBox_Checked"
+                      Style="{StaticResource OptionStyle}" Margin="10,0,0,0"/>
+        </StackPanel>
+
+        <!-- 3. Filter (Новый ряд) -->
+        <Grid Grid.Row="2" Margin="5,0,5,5">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Filter:" VerticalAlignment="Center" Margin="0,0,5,0" 
+                       Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
+            <TextBox Name="txtFilter" Grid.Column="1" TextChanged="TxtFilter_TextChanged"
+                     Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
+                     Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"
+                     BorderBrush="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}"/>
+        </Grid>
+
+        <!-- 4. Status Info -->
+        <TextBlock Grid.Row="3" Name="txtStatusInfo" 
+                   Text="Ready" 
+                   Margin="5,0,5,5" 
+                   Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"
+                   FontWeight="SemiBold"
+                   TextTrimming="CharacterEllipsis">
+            <TextBlock.ToolTip>
+                <ToolTip Content="{Binding Text, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType=TextBlock}}"/>
+            </TextBlock.ToolTip>
+        </TextBlock>
+
+        <!-- 5. File List -->
+        <ListView Name="lvFiles" Grid.Row="4" Margin="5" MouseDoubleClick="LvFiles_MouseDoubleClick" 
                   Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
                   Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"
                   BorderThickness="0"
                   GridViewColumnHeader.Click="GridViewColumnHeader_Click">
             <ListView.View>
                 <GridView>
-                    <!-- Колонка Статус с покраской -->
                     <GridViewColumn Width="40">
                         <GridViewColumnHeader Content="St" Tag="Status"/>
                         <GridViewColumn.CellTemplate>
@@ -92,8 +139,6 @@
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-
-                    <!-- Колонка Путь (обычная) -->
                     <GridViewColumn Width="800">
                         <GridViewColumnHeader Content="File Path" Tag="Path"/>
                         <GridViewColumn.DisplayMemberBinding>

@@ -21,7 +21,7 @@ namespace FileCopyExtension
     public partial class HgToolWindowControl : UserControl
     {
         public ObservableCollection<HgFileItem> Files { get; set; } = new ObservableCollection<HgFileItem>();
-        private string _currentBaseRev = "max(public())";
+        private string _currentBaseRev = ".";
 
         // Для сортировки
         private GridViewColumnHeader _lastHeaderClicked = null;
@@ -31,6 +31,41 @@ namespace FileCopyExtension
         {
             this.InitializeComponent();
             lvFiles.ItemsSource = Files;
+
+            // Инициализация фильтрации (по умолчанию пустая)
+            ICollectionView view = CollectionViewSource.GetDefaultView(Files);
+            view.Filter = FileFilter;
+        }
+
+        // --- ЛОГИКА ФИЛЬТРАЦИИ ---
+        private void TxtFilter_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            // Получаем представление коллекции и просим его обновиться
+            ICollectionView view = CollectionViewSource.GetDefaultView(Files);
+            view.Refresh();
+        }
+
+        private bool FileFilter(object item)
+        {
+            if (string.IsNullOrEmpty(txtFilter.Text)) return true;
+
+            var fileItem = item as HgFileItem;
+            if (fileItem == null) return false;
+
+            // Игнорируем регистр, НЕ игнорируем пробелы
+            return fileItem.Path.IndexOf(txtFilter.Text, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+        // -------------------------
+
+        private void Mode_Checked(object sender, RoutedEventArgs e)
+        {
+            RefreshList();
+        }
+
+        private void CheckBox_Checked(object sender, RoutedEventArgs e)
+        {
+            // Обновляем список при переключении галочки Untracked
+            RefreshList();
         }
 
         // --- ЛОГИКА СОРТИРОВКИ ---
@@ -39,7 +74,6 @@ namespace FileCopyExtension
             var headerClicked = e.OriginalSource as GridViewColumnHeader;
             if (headerClicked == null || headerClicked.Role == GridViewColumnHeaderRole.Padding) return;
 
-            // Используем Tag заголовка как имя свойства для сортировки
             string propertyName = headerClicked.Tag as string;
             if (string.IsNullOrEmpty(propertyName)) return;
 
@@ -57,7 +91,6 @@ namespace FileCopyExtension
             }
 
             Sort(propertyName, direction);
-
             _lastHeaderClicked = headerClicked;
             _lastDirection = direction;
         }
@@ -80,10 +113,15 @@ namespace FileCopyExtension
         private void BtnOpenAll_Click(object sender, RoutedEventArgs e)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
-            if (Files.Count > 10)
+
+            // Внимание: Files содержит все файлы, но lvFiles.Items содержит только отфильтрованные!
+            // Если нужно открывать только те, что сейчас видны в списке (с учетом фильтра):
+            var filteredItems = lvFiles.Items;
+
+            if (filteredItems.Count > 10)
             {
                 var result = MessageBox.Show(
-                    $"Вы собираетесь открыть {Files.Count} файлов. Продолжить?",
+                    $"Вы собираетесь открыть {filteredItems.Count} файлов. Продолжить?",
                     "Подтверждение",
                     MessageBoxButton.OKCancel,
                     MessageBoxImage.Question);
@@ -96,7 +134,7 @@ namespace FileCopyExtension
             if (solutionDir == null) return;
             string repoRoot = FindRepoRoot(solutionDir);
 
-            foreach (var item in Files)
+            foreach (HgFileItem item in filteredItems)
             {
                 string fullPath = Path.Combine(repoRoot, item.Path);
                 if (File.Exists(fullPath))
@@ -134,6 +172,14 @@ namespace FileCopyExtension
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
+            // Если файл Untracked (?), у него нет базовой версии в HG. Дифф невозможен (или пуст).
+            // Просто откроем файл.
+            if (string.IsNullOrEmpty(_currentBaseRev) || _currentBaseRev == "null")
+            {
+                MessageBox.Show("Cannot diff untracked file (no base version).");
+                return;
+            }
+
             string tempFile = Path.GetTempFileName();
             string extension = Path.GetExtension(relativePath);
             string tempFileWithExt = tempFile + extension;
@@ -160,6 +206,12 @@ namespace FileCopyExtension
                             0);
                     }
                 }
+                else
+                {
+                    // Для новых файлов (Added 'A'), которых еще нет в базе, hg cat может упасть.
+                    // В этом случае можно создать пустой файл для сравнения, но пока просто покажем ошибку.
+                    MessageBox.Show("Could not retrieve base version (file might be new in this branch).");
+                }
             }
             catch (Exception ex)
             {
@@ -167,63 +219,145 @@ namespace FileCopyExtension
             }
         }
 
-        public void RefreshList()
+        public async void RefreshList()
         {
-            ThreadHelper.ThrowIfNotOnUIThread();
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+            if (rbBranch == null || rbUncommitted == null) return;
+
+            btnRefresh.IsEnabled = false;
+            btnOpenAll.IsEnabled = false;
+            rbUncommitted.IsEnabled = false;
+            rbBranch.IsEnabled = false;
+            chkShowUntracked.IsEnabled = false;
+
+            Mouse.OverrideCursor = Cursors.Wait;
+
             Files.Clear();
             txtStatusInfo.Text = "Loading...";
 
-            var dte = (DTE2)ServiceProvider.GlobalProvider.GetService(typeof(DTE));
-            string solutionDir = GetSolutionDir(dte);
-            if (solutionDir == null) return;
-
-            string repoRoot = FindRepoRoot(solutionDir);
-            if (string.IsNullOrEmpty(repoRoot))
-            {
-                MessageBox.Show("Repo root not found.");
-                txtStatusInfo.Text = "No repo found";
-                return;
-            }
-
             try
             {
-                RunHgCommand(repoRoot, "branch", out string currentBranch);
-                currentBranch = currentBranch?.Trim() ?? "unknown";
+                var dte = (DTE2)ServiceProvider.GlobalProvider.GetService(typeof(DTE));
+                string solutionDir = GetSolutionDir(dte);
+                if (solutionDir == null) return;
 
-                RunHgCommand(repoRoot, "log -r \"first(branch(.))\" --template \"{rev}\"", out string startRevStr);
-
-                string modeDescription = "";
-
-                if (startRevStr != null && startRevStr.Trim() == "0")
+                string repoRoot = FindRepoRoot(solutionDir);
+                if (string.IsNullOrEmpty(repoRoot))
                 {
-                    _currentBaseRev = "max(public())";
-                    modeDescription = $"Local changes in '{currentBranch}' vs Public";
+                    txtStatusInfo.Text = "No repo found";
+                    return;
+                }
+
+                bool isBranchMode = rbBranch.IsChecked == true;
+                bool isShowUntracked = chkShowUntracked.IsChecked == true;
+
+                _currentBaseRev = isBranchMode ? "p1(first(branch(.)))" : ".";
+
+                var result = await System.Threading.Tasks.Task.Run(() =>
+                {
+                    var fileList = new System.Collections.Generic.List<HgFileItem>();
+                    string errorMsg = null;
+
+                    string template = "{branch}|{node|short}|{desc|firstline}";
+                    string currentInfoStr = null;
+                    string baseInfoStr = null;
+
+                    if (!RunHgCommand(repoRoot, "log -r . --template \"" + template + "\"", out currentInfoStr))
+                        currentInfoStr = "Unknown|?|?";
+
+                    if (!RunHgCommand(repoRoot, "log -r \"" + _currentBaseRev + "\" --template \"" + template + "\"", out baseInfoStr))
+                        baseInfoStr = "Unknown|?|?";
+
+                    // Формируем аргументы.
+                    // -m (modified), -a (added)
+                    // Если нужен untracked, добавляем -u
+                    string flags = "-ma";
+                    if (isShowUntracked) flags += "u";
+
+                    // Команда: hg status --rev REV -mau
+                    if (RunHgCommand(repoRoot, "status --rev \"" + _currentBaseRev + "\" " + flags, out string output))
+                    {
+                        string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                        foreach (var line in lines)
+                        {
+                            if (line.Length > 2)
+                            {
+                                string status = line.Substring(0, 1);
+                                string path = line.Substring(2).Trim();
+                                fileList.Add(new HgFileItem { Status = status, Path = path });
+                            }
+                        }
+                    }
+                    else
+                    {
+                        errorMsg = "Error running hg status";
+                    }
+
+                    return new { Files = fileList, CurrentInfo = currentInfoStr, BaseInfo = baseInfoStr, Error = errorMsg };
+                });
+
+                if (result.Error != null)
+                {
+                    txtStatusInfo.Text = result.Error;
                 }
                 else
                 {
-                    _currentBaseRev = "p1(first(branch(.)))";
-                    modeDescription = $"Full Branch '{currentBranch}' vs Parent";
-                }
-
-                txtStatusInfo.Text = modeDescription;
-
-                if (RunHgCommand(repoRoot, $"status --rev \"{_currentBaseRev}\" -ma", out string output))
-                {
-                    string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                    foreach (var line in lines)
+                    foreach (var item in result.Files)
                     {
-                        if (line.Length > 2)
-                        {
-                            string status = line.Substring(0, 1);
-                            string path = line.Substring(2).Trim();
-                            Files.Add(new HgFileItem { Status = status, Path = path });
-                        }
+                        Files.Add(item);
                     }
+
+                    txtStatusInfo.Inlines.Clear();
+
+                    if (isBranchMode)
+                    {
+                        txtStatusInfo.Inlines.Add(new System.Windows.Documents.Run("Branch: "));
+                        AppendHgInfo(result.CurrentInfo);
+                        txtStatusInfo.Inlines.Add(new System.Windows.Documents.Run(" vs Parent: "));
+                        AppendHgInfo(result.BaseInfo);
+                    }
+                    else
+                    {
+                        txtStatusInfo.Inlines.Add(new System.Windows.Documents.Run("Uncommitted in: "));
+                        AppendHgInfo(result.CurrentInfo);
+                    }
+
+                    txtStatusInfo.ToolTip = txtStatusInfo.Text;
                 }
             }
             catch (Exception ex)
             {
                 txtStatusInfo.Text = "Error: " + ex.Message;
+            }
+            finally
+            {
+                Mouse.OverrideCursor = null;
+                btnRefresh.IsEnabled = true;
+                btnOpenAll.IsEnabled = true;
+                rbUncommitted.IsEnabled = true;
+                rbBranch.IsEnabled = true;
+                chkShowUntracked.IsEnabled = true;
+            }
+        }
+
+        private void AppendHgInfo(string rawHgInfo)
+        {
+            if (string.IsNullOrEmpty(rawHgInfo)) return;
+            var parts = rawHgInfo.Split(new[] { '|' }, 3);
+            if (parts.Length >= 3)
+            {
+                string branch = parts[0];
+                string hash = parts[1];
+                string msg = parts[2];
+
+                txtStatusInfo.Inlines.Add(new System.Windows.Documents.Run(branch + " ") { Foreground = Brushes.DarkOrange, FontWeight = FontWeights.Bold });
+                txtStatusInfo.Inlines.Add(new System.Windows.Documents.Run($"({hash}) ") { Foreground = Brushes.Silver });
+                txtStatusInfo.Inlines.Add(new System.Windows.Documents.Run($"\"{msg}\"") { Foreground = Brushes.CornflowerBlue, FontStyle = FontStyles.Italic });
+            }
+            else
+            {
+                txtStatusInfo.Inlines.Add(new System.Windows.Documents.Run(rawHgInfo + " "));
             }
         }
 
@@ -256,7 +390,6 @@ namespace FileCopyExtension
                     {
                         output = process.StandardOutput.ReadToEnd();
                     }
-
                     process.WaitForExit();
                     return process.ExitCode == 0;
                 }
@@ -292,16 +425,16 @@ namespace FileCopyExtension
         public string Path { get; set; }
     }
 
-    // --- КОНВЕРТЕР ЦВЕТОВ ---
     public class StatusToColorConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
             string status = value as string;
-            if (status == "A") return Brushes.MediumSeaGreen; // Добавленные - Зеленые
-            if (status == "M") return Brushes.CornflowerBlue; // Измененные - Голубые (видно и на темном)
-            if (status == "R") return Brushes.IndianRed;      // Удаленные - Красные
-            return SystemColors.WindowTextBrush;              // Остальные - цвет текста темы
+            if (status == "A") return Brushes.MediumSeaGreen;
+            if (status == "M") return Brushes.CornflowerBlue;
+            if (status == "R") return Brushes.IndianRed;
+            if (status == "?") return Brushes.MediumOrchid; // Новые (Untracked) - Фиолетовые
+            return SystemColors.WindowTextBrush;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
