@@ -155,6 +155,9 @@ namespace FileCopyExtension
                     }
                     catch { continue; }
 
+                    // Игнорируем файлы, у которых нет визуальных окон (закрытые/фантомные) ---
+                    if (doc.Windows.Count == 0) continue;
+
                     if (string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath)) continue;
 
                     string relativePath;

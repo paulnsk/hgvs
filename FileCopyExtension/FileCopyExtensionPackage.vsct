@@ -59,6 +59,20 @@
           <ButtonText>== DUMP open files! ==</ButtonText>
         </Strings>
       </Button>
+      <Button guid="guidFileCopyExtensionPackageCmdSet" id="HgOpenFilesCommandId" priority="0x0101" type="Button">
+	      <Parent guid="guidFileCopyExtensionPackageCmdSet" id="MyMenuGroup" />
+	      <Icon guid="guidImages" id="bmpPicSearch" />
+	      <Strings>
+		      <ButtonText>== Open Modified Files (HG) ==</ButtonText>
+	      </Strings>
+      </Button>
+      <Button guid="guidFileCopyExtensionPackageCmdSet" id="HgToolWindowCommandId" priority="0x0102" type="Button">
+	      <Parent guid="guidFileCopyExtensionPackageCmdSet" id="MyMenuGroup" />
+	      <Icon guid="guidImages" id="bmpPicSearch" />
+	      <Strings>
+		      <ButtonText>== Show HG Changes Window ==</ButtonText>
+	      </Strings>
+      </Button>
     </Buttons>
 
     <!--The bitmaps section is used to define the bitmaps that are used for the commands.-->
@@ -80,7 +94,9 @@
     <GuidSymbol name="guidFileCopyExtensionPackageCmdSet" value="{e3636cf9-410e-4892-81e6-2fc4f329c0aa}">
       <IDSymbol name="MyMenuGroup" value="0x1020" />
       <IDSymbol name="FileCopyCommandId" value="0x0100" />
-    </GuidSymbol>
+      <IDSymbol name="HgOpenFilesCommandId" value="0x0101" />
+      <IDSymbol name="HgToolWindowCommandId" value="0x0102" />
+	</GuidSymbol>
 
     <GuidSymbol name="guidImages" value="{74d29bde-98fa-46f0-81be-b6ff3b7f308a}" >
       <IDSymbol name="bmpPic1" value="1" />

@@ -26,6 +26,7 @@ namespace FileCopyExtension
     [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
     [Guid(FileCopyExtensionPackage.PackageGuidString)]
     [ProvideMenuResource("Menus.ctmenu", 1)]
+    [ProvideToolWindow(typeof(HgToolWindow))]
     public sealed class FileCopyExtensionPackage : AsyncPackage
     {
         /// <summary>
@@ -48,6 +49,8 @@ namespace FileCopyExtension
             // Do any initialization that requires the UI thread after switching to the UI thread.
             await this.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
             await FileCopyCommand.InitializeAsync(this);
+            await HgOpenFilesCommand.InitializeAsync(this);
+            await HgToolWindowCommand.InitializeAsync(this);
         }
 
         #endregion
