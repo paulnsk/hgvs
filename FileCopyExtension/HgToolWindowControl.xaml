@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:vsshell="clr-namespace:Microsoft.VisualStudio.Shell;assembly=Microsoft.VisualStudio.Shell.15.0"
+             xmlns:local="clr-namespace:FileCopyExtension"
              Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
              Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"
              mc:Ignorable="d"
@@ -11,7 +12,10 @@
              Name="MyToolWindow">
 
     <UserControl.Resources>
-        <!-- Стиль списка: при выделении используем системные цвета подсветки VS -->
+        <!-- Подключаем конвертер цветов -->
+        <local:StatusToColorConverter x:Key="StatusColorConverter"/>
+
+        <!-- Стиль списка -->
         <Style TargetType="ListViewItem">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
@@ -26,7 +30,7 @@
             </Style.Triggers>
         </Style>
 
-        <!-- Упрощенный стиль кнопок: используем базовые цвета окна и рамки -->
+        <!-- Стиль кнопок -->
         <Style TargetType="Button">
             <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"/>
             <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
@@ -42,7 +46,6 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <!-- Подсветка при наведении: используем цвет выделения текста -->
                                 <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.HighlightKey}}"/>
                                 <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.HighlightTextKey}}"/>
                             </Trigger>
@@ -62,6 +65,7 @@
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="5">
             <Button Name="btnRefresh" Content="Refresh" Width="80" Height="25" Margin="0,0,5,0" Click="BtnRefresh_Click"/>
             <Button Name="btnOpenAll" Content="Open All" Width="80" Height="25" Click="BtnOpenAll_Click"/>
+
             <TextBlock Name="txtStatusInfo" 
                        Text="Ready" 
                        VerticalAlignment="Center" 
@@ -73,11 +77,29 @@
         <ListView Name="lvFiles" Grid.Row="1" Margin="5" MouseDoubleClick="LvFiles_MouseDoubleClick" 
                   Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
                   Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"
-                  BorderThickness="0">
+                  BorderThickness="0"
+                  GridViewColumnHeader.Click="GridViewColumnHeader_Click">
             <ListView.View>
                 <GridView>
-                    <GridViewColumn Header="St" DisplayMemberBinding="{Binding Status}" Width="30"/>
-                    <GridViewColumn Header="File Path" DisplayMemberBinding="{Binding Path}" Width="800"/>
+                    <!-- Колонка Статус с покраской -->
+                    <GridViewColumn Width="40">
+                        <GridViewColumnHeader Content="St" Tag="Status"/>
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Status}" 
+                                           Foreground="{Binding Status, Converter={StaticResource StatusColorConverter}}"
+                                           FontWeight="Bold"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+
+                    <!-- Колонка Путь (обычная) -->
+                    <GridViewColumn Width="800">
+                        <GridViewColumnHeader Content="File Path" Tag="Path"/>
+                        <GridViewColumn.DisplayMemberBinding>
+                            <Binding Path="Path"/>
+                        </GridViewColumn.DisplayMemberBinding>
+                    </GridViewColumn>
                 </GridView>
             </ListView.View>
         </ListView>

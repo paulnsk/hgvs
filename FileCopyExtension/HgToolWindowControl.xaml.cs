@@ -4,12 +4,16 @@ using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using System;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Media;
 using Process = System.Diagnostics.Process;
 
 namespace FileCopyExtension
@@ -17,15 +21,56 @@ namespace FileCopyExtension
     public partial class HgToolWindowControl : UserControl
     {
         public ObservableCollection<HgFileItem> Files { get; set; } = new ObservableCollection<HgFileItem>();
-
-        // Храним текущую базовую ревизию, чтобы Diff использовал то же самое, что и список
         private string _currentBaseRev = "max(public())";
+
+        // Для сортировки
+        private GridViewColumnHeader _lastHeaderClicked = null;
+        private ListSortDirection _lastDirection = ListSortDirection.Ascending;
 
         public HgToolWindowControl()
         {
             this.InitializeComponent();
             lvFiles.ItemsSource = Files;
         }
+
+        // --- ЛОГИКА СОРТИРОВКИ ---
+        private void GridViewColumnHeader_Click(object sender, RoutedEventArgs e)
+        {
+            var headerClicked = e.OriginalSource as GridViewColumnHeader;
+            if (headerClicked == null || headerClicked.Role == GridViewColumnHeaderRole.Padding) return;
+
+            // Используем Tag заголовка как имя свойства для сортировки
+            string propertyName = headerClicked.Tag as string;
+            if (string.IsNullOrEmpty(propertyName)) return;
+
+            ListSortDirection direction;
+
+            if (headerClicked != _lastHeaderClicked)
+            {
+                direction = ListSortDirection.Ascending;
+            }
+            else
+            {
+                direction = (_lastDirection == ListSortDirection.Ascending)
+                    ? ListSortDirection.Descending
+                    : ListSortDirection.Ascending;
+            }
+
+            Sort(propertyName, direction);
+
+            _lastHeaderClicked = headerClicked;
+            _lastDirection = direction;
+        }
+
+        private void Sort(string sortBy, ListSortDirection direction)
+        {
+            ICollectionView dataView = CollectionViewSource.GetDefaultView(lvFiles.ItemsSource);
+            dataView.SortDescriptions.Clear();
+            SortDescription sd = new SortDescription(sortBy, direction);
+            dataView.SortDescriptions.Add(sd);
+            dataView.Refresh();
+        }
+        // -------------------------
 
         private void BtnRefresh_Click(object sender, RoutedEventArgs e)
         {
@@ -96,7 +141,6 @@ namespace FileCopyExtension
 
             try
             {
-                // Используем _currentBaseRev, который был определен при RefreshList
                 bool success = RunHgCommand(repoRoot, $"cat -r \"{_currentBaseRev}\" \"{relativePath}\"", out string output, tempFileWithExt);
 
                 if (success)
@@ -143,33 +187,26 @@ namespace FileCopyExtension
 
             try
             {
-                // 1. Определяем имя ветки
                 RunHgCommand(repoRoot, "branch", out string currentBranch);
                 currentBranch = currentBranch?.Trim() ?? "unknown";
 
-                // 2. Определяем, является ли ветка корневой (rev 0)
                 RunHgCommand(repoRoot, "log -r \"first(branch(.))\" --template \"{rev}\"", out string startRevStr);
 
                 string modeDescription = "";
 
                 if (startRevStr != null && startRevStr.Trim() == "0")
                 {
-                    // Сценарий 2: Мы в Main/Default ветке. 
-                    // Показываем локальные изменения относительно сервера.
                     _currentBaseRev = "max(public())";
                     modeDescription = $"Local changes in '{currentBranch}' vs Public";
                 }
                 else
                 {
-                    // Сценарий 1: Мы в Feature-ветке.
-                    // Показываем всё содержимое ветки относительно родителя.
                     _currentBaseRev = "p1(first(branch(.)))";
                     modeDescription = $"Full Branch '{currentBranch}' vs Parent";
                 }
 
                 txtStatusInfo.Text = modeDescription;
 
-                // 3. Получаем список файлов используя вычисленную базу
                 if (RunHgCommand(repoRoot, $"status --rev \"{_currentBaseRev}\" -ma", out string output))
                 {
                     string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
@@ -190,7 +227,6 @@ namespace FileCopyExtension
             }
         }
 
-        // Универсальный метод для запуска hg
         private bool RunHgCommand(string workDir, string args, out string output, string outputFile = null)
         {
             output = "";
@@ -254,5 +290,23 @@ namespace FileCopyExtension
     {
         public string Status { get; set; }
         public string Path { get; set; }
+    }
+
+    // --- КОНВЕРТЕР ЦВЕТОВ ---
+    public class StatusToColorConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            string status = value as string;
+            if (status == "A") return Brushes.MediumSeaGreen; // Добавленные - Зеленые
+            if (status == "M") return Brushes.CornflowerBlue; // Измененные - Голубые (видно и на темном)
+            if (status == "R") return Brushes.IndianRed;      // Удаленные - Красные
+            return SystemColors.WindowTextBrush;              // Остальные - цвет текста темы
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
     }
 }
