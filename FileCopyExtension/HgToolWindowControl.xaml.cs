@@ -172,8 +172,6 @@ namespace FileCopyExtension
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            // Если файл Untracked (?), у него нет базовой версии в HG. Дифф невозможен (или пуст).
-            // Просто откроем файл.
             if (string.IsNullOrEmpty(_currentBaseRev) || _currentBaseRev == "null")
             {
                 MessageBox.Show("Cannot diff untracked file (no base version).");
@@ -187,7 +185,8 @@ namespace FileCopyExtension
 
             try
             {
-                bool success = RunHgCommand(repoRoot, $"cat -r \"{_currentBaseRev}\" \"{relativePath}\"", out string output, tempFileWithExt);
+                // Добавили out string error
+                bool success = RunHgCommand(repoRoot, $"cat -r \"{_currentBaseRev}\" \"{relativePath}\"", out string output, out string error, tempFileWithExt);
 
                 if (success)
                 {
@@ -208,9 +207,8 @@ namespace FileCopyExtension
                 }
                 else
                 {
-                    // Для новых файлов (Added 'A'), которых еще нет в базе, hg cat может упасть.
-                    // В этом случае можно создать пустой файл для сравнения, но пока просто покажем ошибку.
-                    MessageBox.Show("Could not retrieve base version (file might be new in this branch).");
+                    // Показываем реальную ошибку, если hg cat упал
+                    MessageBox.Show($"Could not retrieve base version.\nHG Error: {error}");
                 }
             }
             catch (Exception ex)
@@ -218,6 +216,58 @@ namespace FileCopyExtension
                 MessageBox.Show("Error opening diff: " + ex.Message);
             }
         }
+
+
+        //private void OpenDiff(string repoRoot, string relativePath, string currentFilePath)
+        //{
+        //    ThreadHelper.ThrowIfNotOnUIThread();
+
+        //    // Если файл Untracked (?), у него нет базовой версии в HG. Дифф невозможен (или пуст).
+        //    // Просто откроем файл.
+        //    if (string.IsNullOrEmpty(_currentBaseRev) || _currentBaseRev == "null")
+        //    {
+        //        MessageBox.Show("Cannot diff untracked file (no base version).");
+        //        return;
+        //    }
+
+        //    string tempFile = Path.GetTempFileName();
+        //    string extension = Path.GetExtension(relativePath);
+        //    string tempFileWithExt = tempFile + extension;
+        //    File.Move(tempFile, tempFileWithExt);
+
+        //    try
+        //    {
+        //        bool success = RunHgCommand(repoRoot, $"cat -r \"{_currentBaseRev}\" \"{relativePath}\"", out string output, tempFileWithExt);
+
+        //        if (success)
+        //        {
+        //            IVsDifferenceService diffService = (IVsDifferenceService)ServiceProvider.GlobalProvider.GetService(typeof(SVsDifferenceService));
+        //            if (diffService != null)
+        //            {
+        //                diffService.OpenComparisonWindow2(
+        //                    tempFileWithExt,
+        //                    currentFilePath,
+        //                    $"Diff: {relativePath}",
+        //                    $"Hg Base ({_currentBaseRev}) vs Local",
+        //                    "Base Version",
+        //                    "Local Version",
+        //                    null,
+        //                    null,
+        //                    0);
+        //            }
+        //        }
+        //        else
+        //        {
+        //            // Для новых файлов (Added 'A'), которых еще нет в базе, hg cat может упасть.
+        //            // В этом случае можно создать пустой файл для сравнения, но пока просто покажем ошибку.
+        //            MessageBox.Show("Could not retrieve base version (file might be new in this branch).");
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        MessageBox.Show("Error opening diff: " + ex.Message);
+        //    }
+        //}
 
         public async void RefreshList()
         {
@@ -258,25 +308,25 @@ namespace FileCopyExtension
                 {
                     var fileList = new System.Collections.Generic.List<HgFileItem>();
                     string errorMsg = null;
+                    string hgError = null; // Переменная для сырой ошибки
 
                     string template = "{branch}|{node|short}|{desc|firstline}";
                     string currentInfoStr = null;
                     string baseInfoStr = null;
 
-                    if (!RunHgCommand(repoRoot, "log -r . --template \"" + template + "\"", out currentInfoStr))
-                        currentInfoStr = "Unknown|?|?";
+                    // Заглушка для ошибки, используем discard _
+                    RunHgCommand(repoRoot, "log -r . --template \"" + template + "\"", out currentInfoStr, out _);
+                    if (string.IsNullOrEmpty(currentInfoStr)) currentInfoStr = "Unknown|?|?";
 
-                    if (!RunHgCommand(repoRoot, "log -r \"" + _currentBaseRev + "\" --template \"" + template + "\"", out baseInfoStr))
-                        baseInfoStr = "Unknown|?|?";
+                    // Тут может упасть, если parent нет (корневая ветка), но нам важнее ошибка на этапе status
+                    RunHgCommand(repoRoot, "log -r \"" + _currentBaseRev + "\" --template \"" + template + "\"", out baseInfoStr, out _);
+                    if (string.IsNullOrEmpty(baseInfoStr)) baseInfoStr = "Unknown|?|?";
 
-                    // Формируем аргументы.
-                    // -m (modified), -a (added)
-                    // Если нужен untracked, добавляем -u
                     string flags = "-ma";
                     if (isShowUntracked) flags += "u";
 
-                    // Команда: hg status --rev REV -mau
-                    if (RunHgCommand(repoRoot, "status --rev \"" + _currentBaseRev + "\" " + flags, out string output))
+                    // Основной вызов STATUS
+                    if (RunHgCommand(repoRoot, "status --rev \"" + _currentBaseRev + "\" " + flags, out string output, out hgError))
                     {
                         string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
                         foreach (var line in lines)
@@ -291,7 +341,16 @@ namespace FileCopyExtension
                     }
                     else
                     {
-                        errorMsg = "Error running hg status";
+                        // АНАЛИЗ ОШИБКИ
+                        // Mercurial обычно пишет "abort: unknown revision" или "revision 0 has no parent"
+                        if (isBranchMode && (hgError.Contains("revision 0") || hgError.Contains("unknown revision")))
+                        {
+                            errorMsg = "ROOT BRANCH DETECTED (No Parent). Use 'Uncommitted Only'.\nDetails: " + hgError.Trim();
+                        }
+                        else
+                        {
+                            errorMsg = "HG Error: " + hgError.Trim();
+                        }
                     }
 
                     return new { Files = fileList, CurrentInfo = currentInfoStr, BaseInfo = baseInfoStr, Error = errorMsg };
@@ -300,6 +359,8 @@ namespace FileCopyExtension
                 if (result.Error != null)
                 {
                     txtStatusInfo.Text = result.Error;
+                    // Дублируем в тултип, чтобы можно было прочитать длинный лог ошибки
+                    txtStatusInfo.ToolTip = result.Error;
                 }
                 else
                 {
@@ -341,6 +402,128 @@ namespace FileCopyExtension
             }
         }
 
+        //public async void RefreshList()
+        //{
+        //    await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+        //    if (rbBranch == null || rbUncommitted == null) return;
+
+        //    btnRefresh.IsEnabled = false;
+        //    btnOpenAll.IsEnabled = false;
+        //    rbUncommitted.IsEnabled = false;
+        //    rbBranch.IsEnabled = false;
+        //    chkShowUntracked.IsEnabled = false;
+
+        //    Mouse.OverrideCursor = Cursors.Wait;
+
+        //    Files.Clear();
+        //    txtStatusInfo.Text = "Loading...";
+
+        //    try
+        //    {
+        //        var dte = (DTE2)ServiceProvider.GlobalProvider.GetService(typeof(DTE));
+        //        string solutionDir = GetSolutionDir(dte);
+        //        if (solutionDir == null) return;
+
+        //        string repoRoot = FindRepoRoot(solutionDir);
+        //        if (string.IsNullOrEmpty(repoRoot))
+        //        {
+        //            txtStatusInfo.Text = "No repo found";
+        //            return;
+        //        }
+
+        //        bool isBranchMode = rbBranch.IsChecked == true;
+        //        bool isShowUntracked = chkShowUntracked.IsChecked == true;
+
+        //        _currentBaseRev = isBranchMode ? "p1(first(branch(.)))" : ".";
+
+        //        var result = await System.Threading.Tasks.Task.Run(() =>
+        //        {
+        //            var fileList = new System.Collections.Generic.List<HgFileItem>();
+        //            string errorMsg = null;
+
+        //            string template = "{branch}|{node|short}|{desc|firstline}";
+        //            string currentInfoStr = null;
+        //            string baseInfoStr = null;
+
+        //            if (!RunHgCommand(repoRoot, "log -r . --template \"" + template + "\"", out currentInfoStr))
+        //                currentInfoStr = "Unknown|?|?";
+
+        //            if (!RunHgCommand(repoRoot, "log -r \"" + _currentBaseRev + "\" --template \"" + template + "\"", out baseInfoStr))
+        //                baseInfoStr = "Unknown|?|?";
+
+        //            // Формируем аргументы.
+        //            // -m (modified), -a (added)
+        //            // Если нужен untracked, добавляем -u
+        //            string flags = "-ma";
+        //            if (isShowUntracked) flags += "u";
+
+        //            // Команда: hg status --rev REV -mau
+        //            if (RunHgCommand(repoRoot, "status --rev \"" + _currentBaseRev + "\" " + flags, out string output))
+        //            {
+        //                string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        //                foreach (var line in lines)
+        //                {
+        //                    if (line.Length > 2)
+        //                    {
+        //                        string status = line.Substring(0, 1);
+        //                        string path = line.Substring(2).Trim();
+        //                        fileList.Add(new HgFileItem { Status = status, Path = path });
+        //                    }
+        //                }
+        //            }
+        //            else
+        //            {
+        //                errorMsg = "Error running hg status";
+        //            }
+
+        //            return new { Files = fileList, CurrentInfo = currentInfoStr, BaseInfo = baseInfoStr, Error = errorMsg };
+        //        });
+
+        //        if (result.Error != null)
+        //        {
+        //            txtStatusInfo.Text = result.Error;
+        //        }
+        //        else
+        //        {
+        //            foreach (var item in result.Files)
+        //            {
+        //                Files.Add(item);
+        //            }
+
+        //            txtStatusInfo.Inlines.Clear();
+
+        //            if (isBranchMode)
+        //            {
+        //                txtStatusInfo.Inlines.Add(new System.Windows.Documents.Run("Branch: "));
+        //                AppendHgInfo(result.CurrentInfo);
+        //                txtStatusInfo.Inlines.Add(new System.Windows.Documents.Run(" vs Parent: "));
+        //                AppendHgInfo(result.BaseInfo);
+        //            }
+        //            else
+        //            {
+        //                txtStatusInfo.Inlines.Add(new System.Windows.Documents.Run("Uncommitted in: "));
+        //                AppendHgInfo(result.CurrentInfo);
+        //            }
+
+        //            txtStatusInfo.ToolTip = txtStatusInfo.Text;
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        txtStatusInfo.Text = "Error: " + ex.Message;
+        //    }
+        //    finally
+        //    {
+        //        Mouse.OverrideCursor = null;
+        //        btnRefresh.IsEnabled = true;
+        //        btnOpenAll.IsEnabled = true;
+        //        rbUncommitted.IsEnabled = true;
+        //        rbBranch.IsEnabled = true;
+        //        chkShowUntracked.IsEnabled = true;
+        //    }
+        //}
+
         private void AppendHgInfo(string rawHgInfo)
         {
             if (string.IsNullOrEmpty(rawHgInfo)) return;
@@ -361,9 +544,10 @@ namespace FileCopyExtension
             }
         }
 
-        private bool RunHgCommand(string workDir, string args, out string output, string outputFile = null)
+        private bool RunHgCommand(string workDir, string args, out string output, out string error, string outputFile = null)
         {
             output = "";
+            error = "";
             try
             {
                 var psi = new ProcessStartInfo
@@ -372,33 +556,84 @@ namespace FileCopyExtension
                     Arguments = args,
                     WorkingDirectory = workDir,
                     RedirectStandardOutput = true,
+                    RedirectStandardError = true, // Включаем перехват ошибок
                     UseShellExecute = false,
                     CreateNoWindow = true,
-                    StandardOutputEncoding = Encoding.Default
+                    StandardOutputEncoding = Encoding.Default,
+                    StandardErrorEncoding = Encoding.Default
                 };
 
                 using (var process = Process.Start(psi))
                 {
                     if (outputFile != null)
                     {
+                        // Если пишем в файл, то stderr читаем, а stdout копируем
+                        // Читать stderr надо ДО WaitForExit во избежание дедлоков, 
+                        // но для простых утилит типа hg можно и в конце, если буфер не переполнится.
+                        // Для надежности используем асинхронное чтение или просто последовательное, т.к. hg не висит.
+
+                        // Вариант с простым копированием (для hg cat обычно stderr пуст при успехе)
                         using (var fs = new FileStream(outputFile, FileMode.Create, FileAccess.Write))
                         {
                             process.StandardOutput.BaseStream.CopyTo(fs);
                         }
+                        error = process.StandardError.ReadToEnd();
                     }
                     else
                     {
                         output = process.StandardOutput.ReadToEnd();
+                        error = process.StandardError.ReadToEnd();
                     }
+
                     process.WaitForExit();
                     return process.ExitCode == 0;
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                error = ex.Message;
                 return false;
             }
         }
+
+        //private bool RunHgCommand(string workDir, string args, out string output, string outputFile = null)
+        //{
+        //    output = "";
+        //    try
+        //    {
+        //        var psi = new ProcessStartInfo
+        //        {
+        //            FileName = "hg",
+        //            Arguments = args,
+        //            WorkingDirectory = workDir,
+        //            RedirectStandardOutput = true,
+        //            UseShellExecute = false,
+        //            CreateNoWindow = true,
+        //            StandardOutputEncoding = Encoding.Default
+        //        };
+
+        //        using (var process = Process.Start(psi))
+        //        {
+        //            if (outputFile != null)
+        //            {
+        //                using (var fs = new FileStream(outputFile, FileMode.Create, FileAccess.Write))
+        //                {
+        //                    process.StandardOutput.BaseStream.CopyTo(fs);
+        //                }
+        //            }
+        //            else
+        //            {
+        //                output = process.StandardOutput.ReadToEnd();
+        //            }
+        //            process.WaitForExit();
+        //            return process.ExitCode == 0;
+        //        }
+        //    }
+        //    catch
+        //    {
+        //        return false;
+        //    }
+        //}
 
         private string GetSolutionDir(DTE2 dte)
         {
