@@ -59,6 +59,13 @@ namespace FileCopyExtension
 
         private void Mode_Checked(object sender, RoutedEventArgs e)
         {
+            // Скрываем кнопку Undo, если мы не в режиме Uncommitted
+            if (btnUndo != null && rbUncommitted != null)
+            {
+                btnUndo.Visibility = (rbUncommitted.IsChecked == true)
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+            }
             RefreshList();
         }
 
@@ -141,6 +148,99 @@ namespace FileCopyExtension
                 {
                     dte.ItemOperations.OpenFile(fullPath);
                 }
+            }
+        }
+
+
+        private void LvFiles_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // Включаем кнопку только если что-то выбрано
+            if (btnUndo != null)
+            {
+                btnUndo.IsEnabled = lvFiles.SelectedItems.Count > 0;
+            }
+        }
+
+        private async void BtnUndo_Click(object sender, RoutedEventArgs e)
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+            var selectedItems = new System.Collections.Generic.List<HgFileItem>();
+            foreach (var item in lvFiles.SelectedItems)
+            {
+                if (item is HgFileItem hgItem) selectedItems.Add(hgItem);
+            }
+
+            if (selectedItems.Count == 0) return;
+
+            // 1. Формируем сообщение для подтверждения
+            StringBuilder msgBuilder = new StringBuilder();
+            msgBuilder.AppendLine($"Вы уверены, что хотите откатить изменения (revert) для {selectedItems.Count} файлов?");
+            msgBuilder.AppendLine();
+
+            int maxDisplay = 15;
+            for (int i = 0; i < selectedItems.Count; i++)
+            {
+                if (i < maxDisplay)
+                {
+                    msgBuilder.AppendLine($"{selectedItems[i].Path}");
+                }
+                else
+                {
+                    msgBuilder.AppendLine($"... и еще {selectedItems.Count - maxDisplay} файлов");
+                    break;
+                }
+            }
+
+            var result = MessageBox.Show(msgBuilder.ToString(), "Подтверждение отката", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (result != MessageBoxResult.Yes) return;
+
+            // 2. Выполняем откат
+            var dte = (DTE2)ServiceProvider.GlobalProvider.GetService(typeof(DTE));
+            string solutionDir = GetSolutionDir(dte);
+            if (solutionDir == null) return;
+            string repoRoot = FindRepoRoot(solutionDir);
+            if (string.IsNullOrEmpty(repoRoot)) return;
+
+            try
+            {
+                btnUndo.IsEnabled = false;
+                Mouse.OverrideCursor = Cursors.Wait;
+
+                // Формируем аргументы для hg revert
+                // Используем --no-backup, чтобы не создавать .orig файлы (чистый откат)
+                StringBuilder args = new StringBuilder("revert --no-backup");
+
+                foreach (var item in selectedItems)
+                {
+                    // Обязательно кавычки, если в путях есть пробелы
+                    args.Append($" \"{item.Path}\"");
+                }
+
+                await System.Threading.Tasks.Task.Run(() =>
+                {
+                    // Внимание: командная строка имеет лимит длины. 
+                    // Если файлов ОЧЕНЬ много, это может упасть, но для 20-50 файлов обычно ок.
+                    // Если hg revert выдаст ошибку, мы её покажем.
+                    RunHgCommand(repoRoot, args.ToString(), out string output, out string error);
+
+                    if (!string.IsNullOrEmpty(error))
+                    {
+                        throw new Exception(error);
+                    }
+                });
+
+                // 3. Автоматический рефреш после успеха
+                RefreshList();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при откате: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                btnUndo.IsEnabled = true; // Возвращаем кнопку, если рефреш не прошел
+            }
+            finally
+            {
+                Mouse.OverrideCursor = null;
             }
         }
 
@@ -275,11 +375,16 @@ namespace FileCopyExtension
 
             if (rbBranch == null || rbUncommitted == null) return;
 
+            bool isUncommittedMode = rbUncommitted.IsChecked == true;
+            btnUndo.Visibility = isUncommittedMode ? Visibility.Visible : Visibility.Collapsed;
+
             btnRefresh.IsEnabled = false;
             btnOpenAll.IsEnabled = false;
             rbUncommitted.IsEnabled = false;
             rbBranch.IsEnabled = false;
             chkShowUntracked.IsEnabled = false;
+
+            if (btnUndo.Visibility == Visibility.Visible) btnUndo.IsEnabled = false;
 
             Mouse.OverrideCursor = Cursors.Wait;
 
@@ -399,6 +504,10 @@ namespace FileCopyExtension
                 rbUncommitted.IsEnabled = true;
                 rbBranch.IsEnabled = true;
                 chkShowUntracked.IsEnabled = true;
+                if (btnUndo.Visibility == Visibility.Visible)
+                {
+                    btnUndo.IsEnabled = lvFiles.SelectedItems.Count > 0;
+                }
             }
         }
 
