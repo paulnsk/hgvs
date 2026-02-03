@@ -27,8 +27,8 @@ namespace FileCopyExtension
         private string _currentBaseRev = ".";
 
         // Сортировка
-        private GridViewColumnHeader _lastHeaderClicked = null;
-        private ListSortDirection? _lastDirection = null; // null = unsorted
+        private string _lastSortPropertyName = null;
+        private ListSortDirection _lastDirection = ListSortDirection.Ascending;
 
         // Сохранение настроек
         private DispatcherTimer _debounceTimer;
@@ -168,42 +168,38 @@ namespace FileCopyExtension
             // Очистка индикаторов на всех заголовках
             ClearSortIndicators();
 
-            if (headerClicked != _lastHeaderClicked)
+            ListSortDirection direction;
+
+            if (propertyName != _lastSortPropertyName)
             {
                 // Новый столбец -> Asc
-                _lastDirection = ListSortDirection.Ascending;
-                _lastHeaderClicked = headerClicked;
+                direction = ListSortDirection.Ascending;
+                _lastSortPropertyName = propertyName;
+                _lastDirection = direction;
             }
             else
             {
-                // Тот же столбец: переключаем состояние
+                // Тот же столбец: переключаем состояние (Asc -> Desc -> Reset)
                 if (_lastDirection == ListSortDirection.Ascending)
                 {
-                    _lastDirection = ListSortDirection.Descending;
-                }
-                else if (_lastDirection == ListSortDirection.Descending)
-                {
-                    _lastDirection = null; // Reset to unsorted
+                    direction = ListSortDirection.Descending;
+                    _lastDirection = direction;
                 }
                 else
                 {
-                    _lastDirection = ListSortDirection.Ascending;
+                    // Reset (третий клик)
+                    _lastSortPropertyName = null;
+                    _lastDirection = ListSortDirection.Ascending; // Сброс для следующего раза
+
+                    var dataView = CollectionViewSource.GetDefaultView(lvFiles.ItemsSource);
+                    dataView.SortDescriptions.Clear();
+                    dataView.Refresh();
+                    return;
                 }
             }
 
-            if (_lastDirection.HasValue)
-            {
-                Sort(propertyName, _lastDirection.Value);
-                SetSortIndicator(headerClicked, _lastDirection.Value);
-            }
-            else
-            {
-                // Reset
-                var dataView = CollectionViewSource.GetDefaultView(lvFiles.ItemsSource);
-                dataView.SortDescriptions.Clear();
-                dataView.Refresh();
-                _lastHeaderClicked = null; // Сброс памяти о клике, чтобы следующий клик начал с Asc
-            }
+            Sort(propertyName, direction);
+            SetSortIndicator(headerClicked, direction);
         }
 
         private void ClearSortIndicators()
@@ -212,9 +208,14 @@ namespace FileCopyExtension
             {
                 foreach (var col in gridView.Columns)
                 {
-                    if (col.Header is string headerText)
+                    // Важно: проверяем тип Header. В XAML это GridViewColumnHeader, меняем его Content.
+                    if (col.Header is GridViewColumnHeader headerControl && headerControl.Content is string contentText)
                     {
-                        // Удаляем стрелочки если есть
+                        headerControl.Content = contentText.Replace(" ▲", "").Replace(" ▼", "");
+                    }
+                    // Fallback если Header стал строкой
+                    else if (col.Header is string headerText)
+                    {
                         col.Header = headerText.Replace(" ▲", "").Replace(" ▼", "");
                     }
                 }
@@ -223,9 +224,10 @@ namespace FileCopyExtension
 
         private void SetSortIndicator(GridViewColumnHeader header, ListSortDirection direction)
         {
+            // Меняем Content внутри контрола, чтобы не потерять Tag (который висит на самом контроле)
             if (header.Content is string text)
             {
-                header.Column.Header = text + (direction == ListSortDirection.Ascending ? " ▲" : " ▼");
+                header.Content = text + (direction == ListSortDirection.Ascending ? " ▲" : " ▼");
             }
         }
 
@@ -237,7 +239,6 @@ namespace FileCopyExtension
             dataView.SortDescriptions.Add(sd);
             dataView.Refresh();
         }
-        // -------------------------
 
         private void BtnRefresh_Click(object sender, RoutedEventArgs e)
         {
