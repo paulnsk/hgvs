@@ -6,10 +6,7 @@ using Microsoft.VisualStudio.Shell.Interop;
 using Microsoft.VisualStudio.Shell.Settings;
 using System;
 using System.ComponentModel.Design;
-using System.Globalization;
 using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using Task = System.Threading.Tasks.Task;
 
@@ -47,7 +44,7 @@ namespace FileCopyExtension
             commandService = commandService ?? throw new ArgumentNullException(nameof(commandService));
 
             var menuCommandID = new CommandID(CommandSet, CommandId);
-            var menuItem = new MenuCommand(this.Execute, menuCommandID);
+            var menuItem = new MenuCommand(Execute, menuCommandID);
             commandService.AddCommand(menuItem);
         }
 
@@ -63,13 +60,7 @@ namespace FileCopyExtension
         /// <summary>
         /// Gets the service provider from the owner package.
         /// </summary>
-        private Microsoft.VisualStudio.Shell.IAsyncServiceProvider ServiceProvider
-        {
-            get
-            {
-                return this.package;
-            }
-        }
+        private IAsyncServiceProvider ServiceProvider => package;
 
         /// <summary>
         /// Initializes the singleton instance of the command.
@@ -81,7 +72,7 @@ namespace FileCopyExtension
             // the UI thread.
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(package.DisposalToken);
 
-            OleMenuCommandService commandService = await package.GetServiceAsync(typeof(IMenuCommandService)) as OleMenuCommandService;
+            var commandService = await package.GetServiceAsync(typeof(IMenuCommandService)) as OleMenuCommandService;
             Instance = new FileCopyCommand(package, commandService);
         }
 
@@ -121,25 +112,25 @@ namespace FileCopyExtension
 
             if (dte == null || dte.Solution == null || string.IsNullOrEmpty(dte.Solution.FullName))
             {
-                VsShellUtilities.ShowMessageBox(this.package, "Решение не открыто.", "Ошибка", OLEMSGICON.OLEMSGICON_WARNING, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
+                VsShellUtilities.ShowMessageBox(package, "Решение не открыто.", "Ошибка", OLEMSGICON.OLEMSGICON_WARNING, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
                 return;
             }
 
-            string solutionRoot = Path.GetDirectoryName(dte.Solution.FullName);
-            string targetBaseDir = GetTargetDirectory();
+            var solutionRoot = Path.GetDirectoryName(dte.Solution.FullName);
+            var targetBaseDir = GetTargetDirectory();
 
             if (string.IsNullOrEmpty(targetBaseDir)) return; // Пользователь отменил
 
             // Создаем папку с таймстемпом сразу, чтобы было видно, что команда отработала
-            string timestampFolder = DateTime.Now.ToString("yyyyMMddHHmmss");
-            string sessionTargetDir = Path.Combine(targetBaseDir, timestampFolder);
+            var timestampFolder = DateTime.Now.ToString("yyyyMMddHHmmss");
+            var sessionTargetDir = Path.Combine(targetBaseDir, timestampFolder);
 
             if (!Directory.Exists(sessionTargetDir))
             {
                 Directory.CreateDirectory(sessionTargetDir);
             }
 
-            int count = 0;
+            var count = 0;
 
             // dte.Documents может быть null в редких случаях
             if (dte.Documents != null)
@@ -147,7 +138,7 @@ namespace FileCopyExtension
                 foreach (Document doc in dte.Documents)
                 {
                     // Убрана проверка doc.Kind. Полагаемся только на наличие файла на диске.
-                    string sourcePath = "";
+                    var sourcePath = "";
                     try
                     {
                         // doc.FullName иногда может бросать исключение для виртуальных документов
@@ -172,8 +163,8 @@ namespace FileCopyExtension
                         relativePath = Path.Combine("_External", Path.GetFileName(sourcePath));
                     }
 
-                    string destPath = Path.Combine(sessionTargetDir, relativePath);
-                    string destDir = Path.GetDirectoryName(destPath);
+                    var destPath = Path.Combine(sessionTargetDir, relativePath);
+                    var destDir = Path.GetDirectoryName(destPath);
 
                     if (!Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
 
@@ -190,7 +181,7 @@ namespace FileCopyExtension
             }
 
             VsShellUtilities.ShowMessageBox(
-                this.package,
+                package,
                 $"Скопировано файлов: {count}\nПуть: {sessionTargetDir}",
                 "Успех",
                 OLEMSGICON.OLEMSGICON_INFO,
@@ -202,20 +193,20 @@ namespace FileCopyExtension
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            SettingsManager settingsManager = new ShellSettingsManager(this.package);
-            WritableSettingsStore userSettingsStore = settingsManager.GetWritableSettingsStore(SettingsScope.UserSettings);
-            string collectionName = "FileCopyExtension";
-            string propertyName = "TargetDirectory";
+            SettingsManager settingsManager = new ShellSettingsManager(package);
+            var userSettingsStore = settingsManager.GetWritableSettingsStore(SettingsScope.UserSettings);
+            var collectionName = "FileCopyExtension";
+            var propertyName = "TargetDirectory";
 
             // Проверяем, зажат ли Shift
-            bool isShiftPressed = (Control.ModifierKeys & Keys.Shift) == Keys.Shift;
+            var isShiftPressed = (Control.ModifierKeys & Keys.Shift) == Keys.Shift;
 
             if (!userSettingsStore.CollectionExists(collectionName))
             {
                 userSettingsStore.CreateCollection(collectionName);
             }
 
-            string storedPath = userSettingsStore.GetString(collectionName, propertyName, "");
+            var storedPath = userSettingsStore.GetString(collectionName, propertyName, "");
 
             // Если Shift НЕ нажат И путь существует — используем его
             if (!isShiftPressed && !string.IsNullOrEmpty(storedPath) && Directory.Exists(storedPath))
@@ -238,7 +229,7 @@ namespace FileCopyExtension
 
                 if (dialog.ShowDialog() == DialogResult.OK)
                 {
-                    string selectedPath = dialog.SelectedPath;
+                    var selectedPath = dialog.SelectedPath;
                     userSettingsStore.SetString(collectionName, propertyName, selectedPath);
                     return selectedPath;
                 }

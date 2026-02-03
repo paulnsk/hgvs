@@ -1,5 +1,4 @@
 ﻿using Microsoft.VisualStudio.Shell;
-using System;
 using System.Runtime.InteropServices;
 
 namespace FileCopyExtension
@@ -9,8 +8,8 @@ namespace FileCopyExtension
     {
         public HgToolWindow() : base(null)
         {
-            this.Caption = "HG Modified Files";
-            this.Content = new HgToolWindowControl();
+            Caption = "HG Modified Files";
+            Content = new HgToolWindowControl();
         }
     }
 }

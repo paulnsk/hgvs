@@ -6,7 +6,6 @@ using System;
 using System.ComponentModel.Design;
 using System.Diagnostics;
 using System.IO;
-using System.Threading;
 using Process = System.Diagnostics.Process;
 using Task = System.Threading.Tasks.Task;
 
@@ -25,7 +24,7 @@ namespace FileCopyExtension
             commandService = commandService ?? throw new ArgumentNullException(nameof(commandService));
 
             var menuCommandID = new CommandID(CommandSet, CommandId);
-            var menuItem = new MenuCommand(this.Execute, menuCommandID);
+            var menuItem = new MenuCommand(Execute, menuCommandID);
             commandService.AddCommand(menuItem);
         }
 
@@ -34,7 +33,7 @@ namespace FileCopyExtension
         public static async Task InitializeAsync(AsyncPackage package)
         {
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(package.DisposalToken);
-            OleMenuCommandService commandService = await package.GetServiceAsync(typeof(IMenuCommandService)) as OleMenuCommandService;
+            var commandService = await package.GetServiceAsync(typeof(IMenuCommandService)) as OleMenuCommandService;
             Instance = new HgOpenFilesCommand(package, commandService);
         }
 
@@ -55,8 +54,8 @@ namespace FileCopyExtension
                 return;
             }
 
-            string solutionDir = Path.GetDirectoryName(dte.Solution.FullName);
-            string repoRoot = FindRepoRoot(solutionDir);
+            var solutionDir = Path.GetDirectoryName(dte.Solution.FullName);
+            var repoRoot = FindRepoRoot(solutionDir);
 
             if (string.IsNullOrEmpty(repoRoot))
             {
@@ -67,7 +66,7 @@ namespace FileCopyExtension
             try
             {
                 // Запускаем hg status
-                ProcessStartInfo psi = new ProcessStartInfo
+                var psi = new ProcessStartInfo
                 {
                     FileName = "hg",
                     Arguments = "status --rev \"p1(first(branch(.)))\" --rev . -man",
@@ -78,9 +77,9 @@ namespace FileCopyExtension
                     StandardOutputEncoding = System.Text.Encoding.Default
                 };
 
-                using (Process process = Process.Start(psi))
+                using (var process = Process.Start(psi))
                 {
-                    string output = process.StandardOutput.ReadToEnd();
+                    var output = process.StandardOutput.ReadToEnd();
                     process.WaitForExit();
 
                     if (process.ExitCode != 0)
@@ -89,7 +88,7 @@ namespace FileCopyExtension
                         return;
                     }
 
-                    string[] files = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                    var files = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
 
                     if (files.Length == 0)
                     {
@@ -99,8 +98,8 @@ namespace FileCopyExtension
 
                     if (files.Length > 10)
                     {
-                        int result = VsShellUtilities.ShowMessageBox(
-                            this.package,
+                        var result = VsShellUtilities.ShowMessageBox(
+                            package,
                             $"Вы собираетесь открыть {files.Length} файлов. Это может занять пространство-время. Продолжить?",
                             "Подтверждение",
                             OLEMSGICON.OLEMSGICON_QUERY,
@@ -113,10 +112,10 @@ namespace FileCopyExtension
                         }
                     }
 
-                    int openedCount = 0;
-                    foreach (string relativePath in files)
+                    var openedCount = 0;
+                    foreach (var relativePath in files)
                     {
-                        string fullPath = Path.Combine(repoRoot, relativePath);
+                        var fullPath = Path.Combine(repoRoot, relativePath);
                         if (File.Exists(fullPath))
                         {
                             dte.ItemOperations.OpenFile(fullPath);
@@ -135,7 +134,7 @@ namespace FileCopyExtension
 
         private string FindRepoRoot(string startPath)
         {
-            DirectoryInfo dir = new DirectoryInfo(startPath);
+            var dir = new DirectoryInfo(startPath);
             while (dir != null)
             {
                 if (Directory.Exists(Path.Combine(dir.FullName, ".hg")))
@@ -151,7 +150,7 @@ namespace FileCopyExtension
         {
             ThreadHelper.ThrowIfNotOnUIThread();
             VsShellUtilities.ShowMessageBox(
-                this.package,
+                package,
                 message,
                 "Hg Open Files",
                 icon,
