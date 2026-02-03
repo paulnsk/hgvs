@@ -52,18 +52,19 @@
               <CommandFlag>DefaultInvisible</CommandFlag>
               <CommandFlag>DynamicVisibility</CommandFlag>
           If you do not want an image next to your command, remove the Icon node /> -->
-      <Button guid="guidFileCopyExtensionPackageCmdSet" id="FileCopyCommandId" priority="0x0100" type="Button">
-        <Parent guid="guidFileCopyExtensionPackageCmdSet" id="MyMenuGroup" />
-        <Icon guid="guidImages" id="bmpPic1" />
-        <Strings>
-          <ButtonText>== DUMP open files! ==</ButtonText>
-        </Strings>
-      </Button>
-      <Button guid="guidFileCopyExtensionPackageCmdSet" id="HgOpenFilesCommandId" priority="0x0101" type="Button">
+		<Button guid="guidFileCopyExtensionPackageCmdSet" id="FileCopyCommandId" priority="0x0100" type="Button">
+			<Parent guid="guidFileCopyExtensionPackageCmdSet" id="MyMenuGroup" />
+			<Icon guid="guidImages" id="bmpPic1" />
+			<Strings>
+				<ButtonText>== DUMP open files! ==</ButtonText>
+			</Strings>
+		</Button>
+      <!-- Renamed and repurposed ID 0x0101 -->
+      <Button guid="guidFileCopyExtensionPackageCmdSet" id="TotalCmdDumpCommandId" priority="0x0101" type="Button">
 	      <Parent guid="guidFileCopyExtensionPackageCmdSet" id="MyMenuGroup" />
-	      <Icon guid="guidImages" id="bmpPicSearch" />
+	      <Icon guid="guidImages" id="bmpPic1" />
 	      <Strings>
-		      <ButtonText>== Open Modified Files (HG) ==</ButtonText>
+		      <ButtonText>== DUMP open files (TOTALCMD) ==</ButtonText>
 	      </Strings>
       </Button>
       <Button guid="guidFileCopyExtensionPackageCmdSet" id="HgToolWindowCommandId" priority="0x0102" type="Button">
@@ -94,7 +95,7 @@
     <GuidSymbol name="guidFileCopyExtensionPackageCmdSet" value="{e3636cf9-410e-4892-81e6-2fc4f329c0aa}">
       <IDSymbol name="MyMenuGroup" value="0x1020" />
       <IDSymbol name="FileCopyCommandId" value="0x0100" />
-      <IDSymbol name="HgOpenFilesCommandId" value="0x0101" />
+      <IDSymbol name="TotalCmdDumpCommandId" value="0x0101" />
       <IDSymbol name="HgToolWindowCommandId" value="0x0102" />
 	</GuidSymbol>
 

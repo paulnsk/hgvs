@@ -49,7 +49,8 @@ namespace FileCopyExtension
             // Do any initialization that requires the UI thread after switching to the UI thread.
             await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
             await FileCopyCommand.InitializeAsync(this);
-            await HgOpenFilesCommand.InitializeAsync(this);
+            // HgOpenFilesCommand removed
+            await TotalCmdDumpCommand.InitializeAsync(this);
             await HgToolWindowCommand.InitializeAsync(this);
         }
 

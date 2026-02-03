@@ -1,7 +1,9 @@
 ﻿using EnvDTE;
 using EnvDTE80;
+using Microsoft.VisualStudio.Settings;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
+using Microsoft.VisualStudio.Shell.Settings;
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -14,6 +16,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Process = System.Diagnostics.Process;
 
 namespace FileCopyExtension
@@ -23,39 +26,117 @@ namespace FileCopyExtension
         public ObservableCollection<HgFileItem> Files { get; set; } = new ObservableCollection<HgFileItem>();
         private string _currentBaseRev = ".";
 
-        // Для сортировки
+        // Сортировка
         private GridViewColumnHeader _lastHeaderClicked = null;
-        private ListSortDirection _lastDirection = ListSortDirection.Ascending;
+        private ListSortDirection? _lastDirection = null; // null = unsorted
+
+        // Сохранение настроек
+        private DispatcherTimer _debounceTimer;
+        private WritableSettingsStore _settingsStore;
+        private const string CollectionName = "FileCopyExtension_Filters";
 
         public HgToolWindowControl()
         {
             InitializeComponent();
             lvFiles.ItemsSource = Files;
 
-            // Инициализация фильтрации (по умолчанию пустая)
             var view = CollectionViewSource.GetDefaultView(Files);
             view.Filter = FileFilter;
+
+            InitializeSettings();
         }
+
+        private void InitializeSettings()
+        {
+            try
+            {
+                // Init store
+                var settingsManager = new ShellSettingsManager(ServiceProvider.GlobalProvider);
+                _settingsStore = settingsManager.GetWritableSettingsStore(SettingsScope.UserSettings);
+
+                if (!_settingsStore.CollectionExists(CollectionName))
+                    _settingsStore.CreateCollection(CollectionName);
+
+                // Load saved values
+                if (_settingsStore.PropertyExists(CollectionName, "Filter"))
+                    txtFilter.Text = _settingsStore.GetString(CollectionName, "Filter");
+
+                if (_settingsStore.PropertyExists(CollectionName, "Exclude"))
+                    txtExclude.Text = _settingsStore.GetString(CollectionName, "Exclude");
+            }
+            catch { /* Ignore settings load errors */ }
+
+            // Setup debounce timer
+            _debounceTimer = new DispatcherTimer();
+            _debounceTimer.Interval = TimeSpan.FromMilliseconds(500);
+            _debounceTimer.Tick += DebounceTimer_Tick;
+        }
+
+        private void DebounceTimer_Tick(object sender, EventArgs e)
+        {
+            _debounceTimer.Stop();
+            try
+            {
+                if (_settingsStore != null)
+                {
+                    if (!_settingsStore.CollectionExists(CollectionName))
+                        _settingsStore.CreateCollection(CollectionName);
+
+                    _settingsStore.SetString(CollectionName, "Filter", txtFilter.Text);
+                    _settingsStore.SetString(CollectionName, "Exclude", txtExclude.Text);
+                }
+            }
+            catch { /* Ignore write errors */ }
+        }
+
+
+
 
         // --- ЛОГИКА ФИЛЬТРАЦИИ ---
         private void TxtFilter_TextChanged(object sender, TextChangedEventArgs e)
         {
-            // Получаем представление коллекции и просим его обновиться
+            _debounceTimer.Stop();
+            _debounceTimer.Start();
+
             var view = CollectionViewSource.GetDefaultView(Files);
             view.Refresh();
         }
-
         private bool FileFilter(object item)
         {
-            if (string.IsNullOrEmpty(txtFilter.Text)) return true;
-
             var fileItem = item as HgFileItem;
             if (fileItem == null) return false;
 
-            // Игнорируем регистр, НЕ игнорируем пробелы
-            return fileItem.Path.IndexOf(txtFilter.Text, StringComparison.OrdinalIgnoreCase) >= 0;
+            var path = fileItem.Path;
+            var filterText = txtFilter.Text;
+            var excludeText = txtExclude.Text;
+
+            // 1. Check Negative (Exclude) first - if matches, return false
+            if (!string.IsNullOrWhiteSpace(excludeText))
+            {
+                if (CheckMatch(path, excludeText)) return false;
+            }
+
+            // 2. Check Positive (Filter)
+            if (string.IsNullOrWhiteSpace(filterText)) return true;
+
+            return CheckMatch(path, filterText);
         }
-        // -------------------------
+
+
+        private bool CheckMatch(string path, string patterns)
+        {
+            // Full string match
+            if (path.IndexOf(patterns, StringComparison.OrdinalIgnoreCase) >= 0) return true;
+
+            // Parts match
+            var parts = patterns.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var part in parts)
+            {
+                if (path.IndexOf(part, StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            }
+
+            return false;
+        }
 
         private void Mode_Checked(object sender, RoutedEventArgs e)
         {
@@ -84,22 +165,68 @@ namespace FileCopyExtension
             var propertyName = headerClicked.Tag as string;
             if (string.IsNullOrEmpty(propertyName)) return;
 
-            ListSortDirection direction;
+            // Очистка индикаторов на всех заголовках
+            ClearSortIndicators();
 
             if (headerClicked != _lastHeaderClicked)
             {
-                direction = ListSortDirection.Ascending;
+                // Новый столбец -> Asc
+                _lastDirection = ListSortDirection.Ascending;
+                _lastHeaderClicked = headerClicked;
             }
             else
             {
-                direction = (_lastDirection == ListSortDirection.Ascending)
-                    ? ListSortDirection.Descending
-                    : ListSortDirection.Ascending;
+                // Тот же столбец: переключаем состояние
+                if (_lastDirection == ListSortDirection.Ascending)
+                {
+                    _lastDirection = ListSortDirection.Descending;
+                }
+                else if (_lastDirection == ListSortDirection.Descending)
+                {
+                    _lastDirection = null; // Reset to unsorted
+                }
+                else
+                {
+                    _lastDirection = ListSortDirection.Ascending;
+                }
             }
 
-            Sort(propertyName, direction);
-            _lastHeaderClicked = headerClicked;
-            _lastDirection = direction;
+            if (_lastDirection.HasValue)
+            {
+                Sort(propertyName, _lastDirection.Value);
+                SetSortIndicator(headerClicked, _lastDirection.Value);
+            }
+            else
+            {
+                // Reset
+                var dataView = CollectionViewSource.GetDefaultView(lvFiles.ItemsSource);
+                dataView.SortDescriptions.Clear();
+                dataView.Refresh();
+                _lastHeaderClicked = null; // Сброс памяти о клике, чтобы следующий клик начал с Asc
+            }
+        }
+
+        private void ClearSortIndicators()
+        {
+            if (lvFiles.View is GridView gridView)
+            {
+                foreach (var col in gridView.Columns)
+                {
+                    if (col.Header is string headerText)
+                    {
+                        // Удаляем стрелочки если есть
+                        col.Header = headerText.Replace(" ▲", "").Replace(" ▼", "");
+                    }
+                }
+            }
+        }
+
+        private void SetSortIndicator(GridViewColumnHeader header, ListSortDirection direction)
+        {
+            if (header.Content is string text)
+            {
+                header.Column.Header = text + (direction == ListSortDirection.Ascending ? " ▲" : " ▼");
+            }
         }
 
         private void Sort(string sortBy, ListSortDirection direction)
@@ -121,8 +248,6 @@ namespace FileCopyExtension
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            // Внимание: Files содержит все файлы, но lvFiles.Items содержит только отфильтрованные!
-            // Если нужно открывать только те, что сейчас видны в списке (с учетом фильтра):
             var filteredItems = lvFiles.Items;
 
             if (filteredItems.Count > 10)
@@ -146,7 +271,14 @@ namespace FileCopyExtension
                 var fullPath = Path.Combine(repoRoot, item.Path);
                 if (File.Exists(fullPath))
                 {
-                    dte.ItemOperations.OpenFile(fullPath);
+                    try
+                    {
+                        dte.ItemOperations.OpenFile(fullPath);
+                    }
+                    catch
+                    {
+                        // Игнорируем ошибки открытия конкретного файла (бинарники и т.д.)
+                    }
                 }
             }
         }
@@ -250,6 +382,9 @@ namespace FileCopyExtension
             var item = ((FrameworkElement)e.OriginalSource).DataContext as HgFileItem;
             if (item == null) return;
 
+            // FIX: Принудительное выделение
+            lvFiles.SelectedItem = item;
+
             var dte = (DTE2)ServiceProvider.GlobalProvider.GetService(typeof(DTE));
             var solutionDir = GetSolutionDir(dte);
             if (solutionDir == null) return;
@@ -264,7 +399,11 @@ namespace FileCopyExtension
             }
             else
             {
-                dte.ItemOperations.OpenFile(fullPath);
+                try
+                {
+                    dte.ItemOperations.OpenFile(fullPath);
+                }
+                catch { /* Ignore */ }
             }
         }
 

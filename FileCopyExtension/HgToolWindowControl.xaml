@@ -65,15 +65,17 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <!-- Buttons -->
+            <!-- 0 Buttons -->
             <RowDefinition Height="Auto"/>
-            <!-- Options (Radio + Check) -->
+            <!-- 1 Options -->
             <RowDefinition Height="Auto"/>
-            <!-- Filter -->
+            <!-- 2 Filter -->
             <RowDefinition Height="Auto"/>
-            <!-- Status -->
+            <!-- 3 Exclude (NEW) -->
+            <RowDefinition Height="Auto"/>
+            <!-- 4 Status -->
             <RowDefinition Height="*"/>
-            <!-- List -->
+            <!-- 5 List -->
         </Grid.RowDefinitions>
 
         <!-- 1. Buttons -->
@@ -96,22 +98,39 @@
                       Style="{StaticResource OptionStyle}" Margin="10,0,0,0"/>
         </StackPanel>
 
-        <!-- 3. Filter (Новый ряд) -->
-        <Grid Grid.Row="2" Margin="5,0,5,5">
+        <Grid Grid.Row="2" Margin="5,0,5,2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="60"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <TextBlock Text="Filter:" VerticalAlignment="Center" Margin="0,0,5,0" 
                        Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
             <TextBox Name="txtFilter" Grid.Column="1" TextChanged="TxtFilter_TextChanged"
                      Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
-                     Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"
+                     Foreground="#FF90EE90" 
+                     FontWeight="Bold"
                      BorderBrush="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}"/>
+            <!-- LightGreen, adjusted for readability logic in code if needed, but #FF90EE90 works on dark -->
+        </Grid>
+
+        <!-- 3. Exclude (Red) (NEW) -->
+        <Grid Grid.Row="3" Margin="5,0,5,5">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="60"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Exclude:" VerticalAlignment="Center" Margin="0,0,5,0" 
+                       Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
+            <TextBox Name="txtExclude" Grid.Column="1" TextChanged="TxtFilter_TextChanged"
+                     Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
+                     Foreground="#FFFF7F7F"
+                     FontWeight="Bold"
+                     BorderBrush="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}"/>
+            <!-- LightRed/Salmon -->
         </Grid>
 
         <!-- 4. Status Info -->
-        <TextBlock Grid.Row="3" Name="txtStatusInfo" 
+        <TextBlock Grid.Row="4" Name="txtStatusInfo" 
                    Text="Ready" 
                    Margin="5,0,5,5" 
                    Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"
@@ -123,7 +142,7 @@
         </TextBlock>
 
         <!-- 5. File List -->
-        <ListView Name="lvFiles" Grid.Row="4" Margin="5" MouseDoubleClick="LvFiles_MouseDoubleClick" 
+        <ListView Name="lvFiles" Grid.Row="5" Margin="5" MouseDoubleClick="LvFiles_MouseDoubleClick" 
                   Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
                   Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"
                   BorderThickness="0"
