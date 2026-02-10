@@ -456,20 +456,24 @@ namespace FileCopyExtension
                 MessageBox.Show("Error opening diff: " + ex.Message);
             }
         }
-        
+
         public async void RefreshList()
         {
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
 
-            if (rbBranch == null || rbUncommitted == null) return;
+            if (rbBranch == null || rbUncommitted == null || rbBaseBranchHead == null) return;
 
             var isUncommittedMode = rbUncommitted.IsChecked == true;
+            var isBranchMode = rbBranch.IsChecked == true;
+            var isBaseBranchHeadMode = rbBaseBranchHead.IsChecked == true;
+
             btnUndo.Visibility = isUncommittedMode ? Visibility.Visible : Visibility.Collapsed;
 
             btnRefresh.IsEnabled = false;
             btnOpenAll.IsEnabled = false;
             rbUncommitted.IsEnabled = false;
             rbBranch.IsEnabled = false;
+            rbBaseBranchHead.IsEnabled = false;
             chkShowUntracked.IsEnabled = false;
 
             if (btnUndo.Visibility == Visibility.Visible) btnUndo.IsEnabled = false;
@@ -492,34 +496,52 @@ namespace FileCopyExtension
                     return;
                 }
 
-                var isBranchMode = rbBranch.IsChecked == true;
                 var isShowUntracked = chkShowUntracked.IsChecked == true;
-
-                _currentBaseRev = isBranchMode ? "p1(first(branch(.)))" : ".";
 
                 var result = await System.Threading.Tasks.Task.Run(() =>
                 {
                     var fileList = new System.Collections.Generic.List<HgFileItem>();
                     string errorMsg = null;
-                    string hgError = null; // Переменная для сырой ошибки
+                    string hgError = null;
+                    string targetRev = ".";
+
+                    if (isBaseBranchHeadMode)
+                    {
+                        // Динамически определяем имя родительской ветки
+                        if (RunHgCommand(repoRoot, "log -r \"p1(first(branch(.)))\" --template \"{branch}\"", out var bName, out hgError))
+                        {
+                            targetRev = bName.Trim();
+                            if (string.IsNullOrEmpty(targetRev))
+                            {
+                                errorMsg = "Could not determine base branch name.";
+                                return new { Files = fileList, CurrentInfo = "", BaseInfo = "", Error = errorMsg, TargetRev = "." };
+                            }
+                        }
+                        else
+                        {
+                            errorMsg = "Root branch or error: " + hgError.Trim();
+                            return new { Files = fileList, CurrentInfo = "", BaseInfo = "", Error = errorMsg, TargetRev = "." };
+                        }
+                    }
+                    else
+                    {
+                        targetRev = isBranchMode ? "p1(first(branch(.)))" : ".";
+                    }
 
                     var template = "{branch}|{node|short}|{desc|firstline}";
                     string currentInfoStr = null;
                     string baseInfoStr = null;
 
-                    // Заглушка для ошибки, используем discard _
                     RunHgCommand(repoRoot, "log -r . --template \"" + template + "\"", out currentInfoStr, out _);
                     if (string.IsNullOrEmpty(currentInfoStr)) currentInfoStr = "Unknown|?|?";
 
-                    // Тут может упасть, если parent нет (корневая ветка), но нам важнее ошибка на этапе status
-                    RunHgCommand(repoRoot, "log -r \"" + _currentBaseRev + "\" --template \"" + template + "\"", out baseInfoStr, out _);
+                    RunHgCommand(repoRoot, "log -r \"" + targetRev + "\" --template \"" + template + "\"", out baseInfoStr, out _);
                     if (string.IsNullOrEmpty(baseInfoStr)) baseInfoStr = "Unknown|?|?";
 
                     var flags = "-ma";
                     if (isShowUntracked) flags += "u";
 
-                    // Основной вызов STATUS
-                    if (RunHgCommand(repoRoot, "status --rev \"" + _currentBaseRev + "\" " + flags, out var output, out hgError))
+                    if (RunHgCommand(repoRoot, "status --rev \"" + targetRev + "\" " + flags, out var output, out hgError))
                     {
                         var lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
                         foreach (var line in lines)
@@ -534,9 +556,7 @@ namespace FileCopyExtension
                     }
                     else
                     {
-                        // АНАЛИЗ ОШИБКИ
-                        // Mercurial обычно пишет "abort: unknown revision" или "revision 0 has no parent"
-                        if (isBranchMode && (hgError.Contains("revision 0") || hgError.Contains("unknown revision")))
+                        if ((isBranchMode || isBaseBranchHeadMode) && (hgError.Contains("revision 0") || hgError.Contains("unknown revision")))
                         {
                             errorMsg = "ROOT BRANCH DETECTED (No Parent). Use 'Uncommitted Only'.\nDetails: " + hgError.Trim();
                         }
@@ -546,17 +566,17 @@ namespace FileCopyExtension
                         }
                     }
 
-                    return new { Files = fileList, CurrentInfo = currentInfoStr, BaseInfo = baseInfoStr, Error = errorMsg };
+                    return new { Files = fileList, CurrentInfo = currentInfoStr, BaseInfo = baseInfoStr, Error = errorMsg, TargetRev = targetRev };
                 });
 
                 if (result.Error != null)
                 {
                     txtStatusInfo.Text = result.Error;
-                    // Дублируем в тултип, чтобы можно было прочитать длинный лог ошибки
                     txtStatusInfo.ToolTip = result.Error;
                 }
                 else
                 {
+                    _currentBaseRev = result.TargetRev;
                     foreach (var item in result.Files)
                     {
                         Files.Add(item);
@@ -564,11 +584,11 @@ namespace FileCopyExtension
 
                     txtStatusInfo.Inlines.Clear();
 
-                    if (isBranchMode)
+                    if (isBranchMode || isBaseBranchHeadMode)
                     {
                         txtStatusInfo.Inlines.Add(new System.Windows.Documents.Run("Branch: "));
                         AppendHgInfo(result.CurrentInfo);
-                        txtStatusInfo.Inlines.Add(new System.Windows.Documents.Run(" vs Parent: "));
+                        txtStatusInfo.Inlines.Add(new System.Windows.Documents.Run(isBaseBranchHeadMode ? " vs Head of: " : " vs Parent: "));
                         AppendHgInfo(result.BaseInfo);
                     }
                     else
@@ -591,6 +611,7 @@ namespace FileCopyExtension
                 btnOpenAll.IsEnabled = true;
                 rbUncommitted.IsEnabled = true;
                 rbBranch.IsEnabled = true;
+                rbBaseBranchHead.IsEnabled = true;
                 chkShowUntracked.IsEnabled = true;
                 if (btnUndo.Visibility == Visibility.Visible)
                 {

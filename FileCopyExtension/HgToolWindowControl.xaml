@@ -91,6 +91,8 @@
                          Checked="Mode_Checked" Style="{StaticResource OptionStyle}"/>
             <RadioButton Name="rbBranch" Content="Entire Branch (vs Parent)" GroupName="Mode" 
                          Checked="Mode_Checked" Style="{StaticResource OptionStyle}"/>
+            <RadioButton Name="rbBaseBranchHead" Content="Vs Parent Branch HEAD" GroupName="Mode" 
+                         Checked="Mode_Checked" Style="{StaticResource OptionStyle}"/>
 
             <!-- Новый чекбокс -->
             <CheckBox Name="chkShowUntracked" Content="Show Untracked (?)" 
