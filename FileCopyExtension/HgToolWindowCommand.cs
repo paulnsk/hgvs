@@ -45,7 +45,7 @@ namespace FileCopyExtension
 
             // Если окно только что открылось, попробуем обновить список
             var control = window.Content as HgToolWindowControl;
-            if (control != null && control.Files.Count == 0)
+            if (control != null && control.DataContext is HgToolWindowViewModel vm && vm.Files.Count == 0)
             {
                 control.RefreshList();
             }

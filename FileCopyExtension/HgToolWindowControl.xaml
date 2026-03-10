@@ -8,16 +8,18 @@
              Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
              Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"
              mc:Ignorable="d"
-             d:DesignHeight="450" d:DesignWidth="600"
-             Name="MyToolWindow">
+             d:DesignHeight="450" d:DesignWidth="600">
 
     <UserControl.Resources>
         <local:StatusToColorConverter x:Key="StatusColorConverter"/>
+        <local:InverseBooleanConverter x:Key="InverseBoolConverter"/>
+        <local:EnumToBooleanConverter x:Key="EnumToBoolConverter"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
-        <!-- Стиль для ListViewItem -->
         <Style TargetType="ListViewItem">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
+            <EventSetter Event="MouseDoubleClick" Handler="LvFiles_MouseDoubleClick"/>
             <Style.Triggers>
                 <Trigger Property="IsSelected" Value="True">
                     <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.HighlightKey}}"/>
@@ -29,7 +31,6 @@
             </Style.Triggers>
         </Style>
 
-        <!-- Стиль кнопок -->
         <Style TargetType="Button">
             <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"/>
             <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
@@ -37,10 +38,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" 
-                                BorderBrush="{TemplateBinding BorderBrush}" 
-                                BorderThickness="1" 
-                                Padding="4,2">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" Padding="4,2">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -48,68 +46,75 @@
                                 <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.HighlightKey}}"/>
                                 <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.HighlightTextKey}}"/>
                             </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
 
-        <!-- Стиль для RadioButton/CheckBox -->
         <Style TargetType="Control" x:Key="OptionStyle">
             <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
             <Setter Property="Margin" Value="0,0,10,0"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.5"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
     </UserControl.Resources>
 
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <!-- 0 Buttons -->
             <RowDefinition Height="Auto"/>
-            <!-- 1 Options -->
             <RowDefinition Height="Auto"/>
-            <!-- 2 Filter -->
             <RowDefinition Height="Auto"/>
-            <!-- 3 Exclude (NEW) -->
             <RowDefinition Height="Auto"/>
-            <!-- 4 Status -->
             <RowDefinition Height="*"/>
-            <!-- 5 List -->
         </Grid.RowDefinitions>
 
         <!-- 1. Buttons -->
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="5">
-            <Button Name="btnRefresh" Content="Refresh" Width="80" Height="25" Margin="0,0,5,0" Click="BtnRefresh_Click"/>
-            <Button Name="btnOpenAll" Content="Open All" Width="80" Height="25" Click="BtnOpenAll_Click"/>
-            <Button Name="btnUndo" Content="Undo Changes" Width="90" Height="25" Click="BtnUndo_Click" IsEnabled="False"/>
+            <Button Content="Refresh" Width="80" Height="25" Margin="0,0,5,0" Command="{Binding RefreshCommand}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"/>
+            <Button Content="Open All" Width="80" Height="25" Margin="0,0,5,0" Command="{Binding OpenAllCommand}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"/>
+            <Button Content="Undo Changes" Width="90" Height="25" 
+                    Command="{Binding UndoCommand}" CommandParameter="{Binding SelectedItems, ElementName=lvFiles}">
+                <Button.Visibility>
+                    <Binding Path="SelectedMode" ConverterParameter="{x:Static local:HgDisplayMode.Uncommitted}">
+                        <Binding.Converter>
+                            <local:EnumToBooleanConverter/>
+                        </Binding.Converter>
+                    </Binding>
+                </Button.Visibility>
+            </Button>
         </StackPanel>
 
         <!-- 2. Options -->
-        <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="5,0,5,5">
-            <RadioButton Name="rbUncommitted" Content="Uncommitted Only" GroupName="Mode" IsChecked="True" 
-                         Checked="Mode_Checked" Style="{StaticResource OptionStyle}"/>
-            <RadioButton Name="rbBranch" Content="Entire Branch (vs Parent)" GroupName="Mode" 
-                         Checked="Mode_Checked" Style="{StaticResource OptionStyle}"/>
-            <RadioButton Name="rbBaseBranchHead" Content="Vs Parent Branch HEAD" GroupName="Mode" 
-                         Checked="Mode_Checked" Style="{StaticResource OptionStyle}"/>
+        <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="5,0,5,5" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}">
+            <RadioButton Content="Uncommitted Only" GroupName="Mode" Style="{StaticResource OptionStyle}"
+                 IsChecked="{Binding SelectedMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter={x:Static local:HgDisplayMode.Uncommitted}}"/>
+            <RadioButton Content="Entire Branch (vs Parent)" GroupName="Mode" Style="{StaticResource OptionStyle}"
+                 IsChecked="{Binding SelectedMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter={x:Static local:HgDisplayMode.Branch}}"/>
+            <RadioButton Content="Vs Parent Branch HEAD" GroupName="Mode" Style="{StaticResource OptionStyle}"
+                 IsChecked="{Binding SelectedMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter={x:Static local:HgDisplayMode.BaseBranchHead}}"/>
 
-            <!-- НОВЫЙ БЛОК: Сравнение с произвольной веткой -->
             <StackPanel Orientation="Horizontal" Margin="0,0,10,0" VerticalAlignment="Center">
-                <RadioButton Name="rbCustomBranch" Content="vs " GroupName="Mode" 
-                             Checked="Mode_Checked" Style="{StaticResource OptionStyle}" Margin="0"/>
-                <TextBox Name="txtCompareBranch" Width="100" Text="default" 
-                         TextChanged="TxtCompareBranch_TextChanged"
-                         Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
-                         BorderBrush="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}"
-                         FontWeight="Bold" VerticalAlignment="Center" Padding="2,0">
+                <RadioButton Content="vs " GroupName="Mode" Style="{StaticResource OptionStyle}" Margin="0"
+                     IsChecked="{Binding SelectedMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter={x:Static local:HgDisplayMode.CustomBranch}}"/>
+                <TextBox Width="100" Text="{Binding CompareBranchName, UpdateSourceTrigger=PropertyChanged}" 
+                 Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
+                 BorderBrush="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}"
+                 FontWeight="Bold" VerticalAlignment="Center" Padding="2,0">
                     <TextBox.Style>
                         <Style TargetType="TextBox">
                             <Setter Property="Foreground" Value="Gray"/>
                             <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsChecked, ElementName=rbCustomBranch}" Value="True">
+                                <DataTrigger Binding="{Binding SelectedMode}" Value="{x:Static local:HgDisplayMode.CustomBranch}">
                                     <Setter Property="Foreground" Value="#FF87CEFA"/>
-                                    <!-- LightSkyBlue -->
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
@@ -117,60 +122,67 @@
                 </TextBox>
             </StackPanel>
 
-            <CheckBox Name="chkShowUntracked" Content="Show Untracked (?)" 
-                      Checked="CheckBox_Checked" Unchecked="CheckBox_Checked"
-                      Style="{StaticResource OptionStyle}" Margin="10,0,0,0"/>
+            <CheckBox Content="Show Untracked (?)" IsChecked="{Binding ShowUntracked}" Style="{StaticResource OptionStyle}" Margin="10,0,0,0"/>
         </WrapPanel>
 
+        <!-- 3. Filter -->
         <Grid Grid.Row="2" Margin="5,0,5,2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="60"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
-            <TextBlock Text="Filter:" VerticalAlignment="Center" Margin="0,0,5,0" 
-                       Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
-            <TextBox Name="txtFilter" Grid.Column="1" TextChanged="TxtFilter_TextChanged"
-                     Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
-                     Foreground="#FF90EE90" 
-                     FontWeight="Bold"
+            <TextBlock Text="Filter:" VerticalAlignment="Center" Margin="0,0,5,0" Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
+            <TextBox Grid.Column="1" Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
+                     Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}" Foreground="#FF90EE90" FontWeight="Bold"
                      BorderBrush="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}"/>
-            <!-- LightGreen, adjusted for readability logic in code if needed, but #FF90EE90 works on dark -->
         </Grid>
 
-        <!-- 3. Exclude (Red) (NEW) -->
+        <!-- 4. Exclude -->
         <Grid Grid.Row="3" Margin="5,0,5,5">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="60"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
-            <TextBlock Text="Exclude:" VerticalAlignment="Center" Margin="0,0,5,0" 
-                       Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
-            <TextBox Name="txtExclude" Grid.Column="1" TextChanged="TxtFilter_TextChanged"
-                     Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
-                     Foreground="#FFFF7F7F"
-                     FontWeight="Bold"
+            <TextBlock Text="Exclude:" VerticalAlignment="Center" Margin="0,0,5,0" Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
+            <TextBox Grid.Column="1" Text="{Binding ExcludeText, UpdateSourceTrigger=PropertyChanged}"
+                     Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}" Foreground="#FFFF7F7F" FontWeight="Bold"
                      BorderBrush="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}"/>
-            <!-- LightRed/Salmon -->
         </Grid>
 
-        <!-- 4. Status Info -->
-        <TextBlock Grid.Row="4" Name="txtStatusInfo" 
-                   Text="Ready" 
-                   Margin="5,0,5,5" 
-                   Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"
-                   FontWeight="SemiBold"
-                   TextTrimming="CharacterEllipsis">
-            <TextBlock.ToolTip>
-                <ToolTip Content="{Binding Text, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType=TextBlock}}"/>
-            </TextBlock.ToolTip>
-        </TextBlock>
+        <!-- 5. Status Info (MVVM Styled Text) -->
+        <ItemsControl Grid.Row="4" ItemsSource="{Binding StatusRuns}" Margin="5,0,5,5">
+            <ItemsControl.ToolTip>
+                <ToolTip Content="{Binding StatusTooltip}"/>
+            </ItemsControl.ToolTip>
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <WrapPanel Orientation="Horizontal"/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <!-- Fallback color to VS text key if no foreground provided -->
+                    <TextBlock Text="{Binding Text}" FontWeight="{Binding FontWeight}" FontStyle="{Binding FontStyle}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{Binding Foreground}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Foreground}" Value="{x:Null}">
+                                        <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
 
-        <!-- 5. File List -->
-        <ListView Name="lvFiles" Grid.Row="5" Margin="5" MouseDoubleClick="LvFiles_MouseDoubleClick" 
+        <!-- 6. File List -->
+        <ListView Name="lvFiles" Grid.Row="5" Margin="5" ItemsSource="{Binding FilesView}"
                   Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
                   Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"
-                  BorderThickness="0"
-                  GridViewColumnHeader.Click="GridViewColumnHeader_Click"
+                  BorderThickness="0" GridViewColumnHeader.Click="GridViewColumnHeader_Click"
                   SelectionChanged="LvFiles_SelectionChanged">
             <ListView.View>
                 <GridView>
@@ -178,9 +190,7 @@
                         <GridViewColumnHeader Content="St" Tag="Status"/>
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
-                                <TextBlock Text="{Binding Status}" 
-                                           Foreground="{Binding Status, Converter={StaticResource StatusColorConverter}}"
-                                           FontWeight="Bold"/>
+                                <TextBlock Text="{Binding Status}" Foreground="{Binding Status, Converter={StaticResource StatusColorConverter}}" FontWeight="Bold"/>
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
