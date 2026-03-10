@@ -86,7 +86,7 @@
         </StackPanel>
 
         <!-- 2. Options -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="5,0,5,5">
+        <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="5,0,5,5">
             <RadioButton Name="rbUncommitted" Content="Uncommitted Only" GroupName="Mode" IsChecked="True" 
                          Checked="Mode_Checked" Style="{StaticResource OptionStyle}"/>
             <RadioButton Name="rbBranch" Content="Entire Branch (vs Parent)" GroupName="Mode" 
@@ -94,11 +94,33 @@
             <RadioButton Name="rbBaseBranchHead" Content="Vs Parent Branch HEAD" GroupName="Mode" 
                          Checked="Mode_Checked" Style="{StaticResource OptionStyle}"/>
 
-            <!-- Новый чекбокс -->
+            <!-- НОВЫЙ БЛОК: Сравнение с произвольной веткой -->
+            <StackPanel Orientation="Horizontal" Margin="0,0,10,0" VerticalAlignment="Center">
+                <RadioButton Name="rbCustomBranch" Content="vs " GroupName="Mode" 
+                             Checked="Mode_Checked" Style="{StaticResource OptionStyle}" Margin="0"/>
+                <TextBox Name="txtCompareBranch" Width="100" Text="default" 
+                         TextChanged="TxtCompareBranch_TextChanged"
+                         Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
+                         BorderBrush="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}"
+                         FontWeight="Bold" VerticalAlignment="Center" Padding="2,0">
+                    <TextBox.Style>
+                        <Style TargetType="TextBox">
+                            <Setter Property="Foreground" Value="Gray"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsChecked, ElementName=rbCustomBranch}" Value="True">
+                                    <Setter Property="Foreground" Value="#FF87CEFA"/>
+                                    <!-- LightSkyBlue -->
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBox.Style>
+                </TextBox>
+            </StackPanel>
+
             <CheckBox Name="chkShowUntracked" Content="Show Untracked (?)" 
                       Checked="CheckBox_Checked" Unchecked="CheckBox_Checked"
                       Style="{StaticResource OptionStyle}" Margin="10,0,0,0"/>
-        </StackPanel>
+        </WrapPanel>
 
         <Grid Grid.Row="2" Margin="5,0,5,2">
             <Grid.ColumnDefinitions>

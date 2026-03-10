@@ -37,6 +37,12 @@ namespace FileCopyExtension
 
         public HgToolWindowControl()
         {
+            // Инициализируем таймер ДО загрузки XAML, чтобы избежать NullReferenceException 
+            // при срабатывании событий TextChanged на этапе InitializeComponent()
+            _debounceTimer = new DispatcherTimer();
+            _debounceTimer.Interval = TimeSpan.FromMilliseconds(500);
+            _debounceTimer.Tick += DebounceTimer_Tick;
+
             InitializeComponent();
             lvFiles.ItemsSource = Files;
 
@@ -63,13 +69,11 @@ namespace FileCopyExtension
 
                 if (_settingsStore.PropertyExists(CollectionName, "Exclude"))
                     txtExclude.Text = _settingsStore.GetString(CollectionName, "Exclude");
+
+                if (_settingsStore.PropertyExists(CollectionName, "CompareBranch"))
+                    txtCompareBranch.Text = _settingsStore.GetString(CollectionName, "CompareBranch");
             }
             catch { /* Ignore settings load errors */ }
-
-            // Setup debounce timer
-            _debounceTimer = new DispatcherTimer();
-            _debounceTimer.Interval = TimeSpan.FromMilliseconds(500);
-            _debounceTimer.Tick += DebounceTimer_Tick;
         }
 
         private void DebounceTimer_Tick(object sender, EventArgs e)
@@ -83,7 +87,8 @@ namespace FileCopyExtension
                         _settingsStore.CreateCollection(CollectionName);
 
                     _settingsStore.SetString(CollectionName, "Filter", txtFilter.Text);
-                    _settingsStore.SetString(CollectionName, "Exclude", txtExclude.Text);
+                    _settingsStore.SetString(CollectionName, "Exclude", txtExclude.Text);                    
+                    _settingsStore.SetString(CollectionName, "CompareBranch", txtCompareBranch.Text);
                 }
             }
             catch { /* Ignore write errors */ }
@@ -101,6 +106,16 @@ namespace FileCopyExtension
             var view = CollectionViewSource.GetDefaultView(Files);
             view.Refresh();
         }
+
+        private void TxtCompareBranch_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            // Только сохраняем значение в настройки через таймер,
+            // автоматический RefreshList не делаем, чтобы не дергать hg при каждом символе.
+            _debounceTimer.Stop();
+            _debounceTimer.Start();
+        }
+
+
         private bool FileFilter(object item)
         {
             var fileItem = item as HgFileItem;
@@ -461,11 +476,22 @@ namespace FileCopyExtension
         {
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
 
-            if (rbBranch == null || rbUncommitted == null || rbBaseBranchHead == null) return;
+            if (rbBranch == null || rbUncommitted == null || rbBaseBranchHead == null || rbCustomBranch == null) return;
 
             var isUncommittedMode = rbUncommitted.IsChecked == true;
             var isBranchMode = rbBranch.IsChecked == true;
             var isBaseBranchHeadMode = rbBaseBranchHead.IsChecked == true;
+            var isCustomBranchMode = rbCustomBranch.IsChecked == true; // НОВОЕ
+
+            // Логика проверки пустого TextBox для новой опции
+            var customBranchName = txtCompareBranch.Text.Trim();
+            if (isCustomBranchMode && string.IsNullOrEmpty(customBranchName))
+            {
+                Files.Clear();
+                txtStatusInfo.Text = "Error: Branch name cannot be empty.";
+                txtStatusInfo.ToolTip = txtStatusInfo.Text;
+                return;
+            }
 
             btnUndo.Visibility = isUncommittedMode ? Visibility.Visible : Visibility.Collapsed;
 
@@ -474,6 +500,7 @@ namespace FileCopyExtension
             rbUncommitted.IsEnabled = false;
             rbBranch.IsEnabled = false;
             rbBaseBranchHead.IsEnabled = false;
+            rbCustomBranch.IsEnabled = false; // НОВОЕ
             chkShowUntracked.IsEnabled = false;
 
             if (btnUndo.Visibility == Visibility.Visible) btnUndo.IsEnabled = false;
@@ -522,6 +549,10 @@ namespace FileCopyExtension
                             errorMsg = "Root branch or error: " + hgError.Trim();
                             return new { Files = fileList, CurrentInfo = "", BaseInfo = "", Error = errorMsg, TargetRev = "." };
                         }
+                    }
+                    else if (isCustomBranchMode)
+                    {
+                        targetRev = customBranchName;
                     }
                     else
                     {
@@ -584,11 +615,16 @@ namespace FileCopyExtension
 
                     txtStatusInfo.Inlines.Clear();
 
-                    if (isBranchMode || isBaseBranchHeadMode)
+                    if (isBranchMode || isBaseBranchHeadMode || isCustomBranchMode)
                     {
                         txtStatusInfo.Inlines.Add(new System.Windows.Documents.Run("Branch: "));
                         AppendHgInfo(result.CurrentInfo);
-                        txtStatusInfo.Inlines.Add(new System.Windows.Documents.Run(isBaseBranchHeadMode ? " vs Head of: " : " vs Parent: "));
+
+                        string relationText = " vs Parent: ";
+                        if (isBaseBranchHeadMode) relationText = " vs Head of: ";
+                        if (isCustomBranchMode) relationText = " vs Branch: ";
+
+                        txtStatusInfo.Inlines.Add(new System.Windows.Documents.Run(relationText));
                         AppendHgInfo(result.BaseInfo);
                     }
                     else
@@ -612,6 +648,7 @@ namespace FileCopyExtension
                 rbUncommitted.IsEnabled = true;
                 rbBranch.IsEnabled = true;
                 rbBaseBranchHead.IsEnabled = true;
+                rbCustomBranch.IsEnabled = true;
                 chkShowUntracked.IsEnabled = true;
                 if (btnUndo.Visibility == Visibility.Visible)
                 {
