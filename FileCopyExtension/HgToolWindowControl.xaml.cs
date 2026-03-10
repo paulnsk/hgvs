@@ -100,19 +100,19 @@ namespace FileCopyExtension
         // --- ЛОГИКА ФИЛЬТРАЦИИ ---
         private void TxtFilter_TextChanged(object sender, TextChangedEventArgs e)
         {
-            _debounceTimer.Stop();
-            _debounceTimer.Start();
+            _debounceTimer?.Stop();
+            _debounceTimer?.Start();
 
             var view = CollectionViewSource.GetDefaultView(Files);
-            view.Refresh();
+            view?.Refresh();
         }
 
         private void TxtCompareBranch_TextChanged(object sender, TextChangedEventArgs e)
         {
             // Только сохраняем значение в настройки через таймер,
             // автоматический RefreshList не делаем, чтобы не дергать hg при каждом символе.
-            _debounceTimer.Stop();
-            _debounceTimer.Start();
+            _debounceTimer?.Stop();
+            _debounceTimer?.Start();
         }
 
 
