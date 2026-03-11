@@ -6,8 +6,10 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using FileCopyExtension.Models;
+using FileCopyExtension.ViewModels;
 
-namespace FileCopyExtension
+namespace FileCopyExtension.Views
 {
     public partial class HgToolWindowControl : UserControl
     {

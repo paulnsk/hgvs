@@ -2,6 +2,7 @@
 using Microsoft.VisualStudio.Shell.Interop;
 using System;
 using System.ComponentModel.Design;
+using FileCopyExtension.ViewModels;
 using Task = System.Threading.Tasks.Task;
 
 namespace FileCopyExtension
@@ -18,8 +19,8 @@ namespace FileCopyExtension
             this.package = package ?? throw new ArgumentNullException(nameof(package));
             commandService = commandService ?? throw new ArgumentNullException(nameof(commandService));
 
-            var menuCommandID = new CommandID(CommandSet, CommandId);
-            var menuItem = new MenuCommand(Execute, menuCommandID);
+            var menuCommandId = new CommandID(CommandSet, CommandId);
+            var menuItem = new MenuCommand(Execute, menuCommandId);
             commandService.AddCommand(menuItem);
         }
 
@@ -44,7 +45,7 @@ namespace FileCopyExtension
             var windowFrame = (IVsWindowFrame)window.Frame;
 
             // Если окно только что открылось, попробуем обновить список
-            var control = window.Content as HgToolWindowControl;
+            var control = window.Content as Views.HgToolWindowControl;
             if (control != null && control.DataContext is HgToolWindowViewModel vm && vm.Files.Count == 0)
             {
                 control.RefreshList();

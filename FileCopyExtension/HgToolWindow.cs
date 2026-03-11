@@ -9,7 +9,7 @@ namespace FileCopyExtension
         public HgToolWindow() : base(null)
         {
             Caption = "HG Modified Files";
-            Content = new HgToolWindowControl();
+            Content = new Views.HgToolWindowControl();
         }
     }
 }

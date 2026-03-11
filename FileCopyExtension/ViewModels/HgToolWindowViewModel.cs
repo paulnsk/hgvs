@@ -1,26 +1,24 @@
-﻿using EnvDTE;
-using EnvDTE80;
-using Microsoft.VisualStudio.Settings;
-using Microsoft.VisualStudio.Shell;
-using Microsoft.VisualStudio.Shell.Interop;
-using Microsoft.VisualStudio.Shell.Settings;
-using System;
-using System.Collections.Generic;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Data;
-using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using EnvDTE;
+using EnvDTE80;
+using FileCopyExtension.Models;
+using Microsoft.VisualStudio.Settings;
+using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Shell.Interop;
+using Microsoft.VisualStudio.Shell.Settings;
 using Process = System.Diagnostics.Process;
 using Task = System.Threading.Tasks.Task;
 
-namespace FileCopyExtension
+namespace FileCopyExtension.ViewModels
 {
     public class HgToolWindowViewModel : ObservableObject
     {
@@ -531,81 +529,4 @@ namespace FileCopyExtension
     }
 
     // --- Ванильные MVVM хелперы ---
-
-    public abstract class ObservableObject : INotifyPropertyChanged
-    {
-        public event PropertyChangedEventHandler PropertyChanged;
-
-        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
-
-        protected bool SetProperty<T>(ref T storage, T value, [CallerMemberName] string propertyName = null)
-        {
-            if (EqualityComparer<T>.Default.Equals(storage, value)) return false;
-            storage = value;
-            OnPropertyChanged(propertyName);
-            return true;
-        }
-    }
-
-    public class RelayCommand : ICommand
-    {
-        private readonly Action<object> _execute;
-        private readonly Func<object, bool> _canExecute;
-
-        public RelayCommand(Action<object> execute, Func<object, bool> canExecute = null)
-        {
-            _execute = execute ?? throw new ArgumentNullException(nameof(execute));
-            _canExecute = canExecute;
-        }
-
-        public event EventHandler CanExecuteChanged
-        {
-            add => CommandManager.RequerySuggested += value;
-            remove => CommandManager.RequerySuggested -= value;
-        }
-
-        public bool CanExecute(object parameter) => _canExecute == null || _canExecute(parameter);
-
-        public void Execute(object parameter) => _execute(parameter);
-
-        public void NotifyCanExecuteChanged() => CommandManager.InvalidateRequerySuggested();
-    }
-
-    public class HgFileItem
-    {
-        public string Status { get; set; }
-        public string Path { get; set; }
-    }
-
-    public class StatusRun
-    {
-        public string Text { get; set; }
-        public Brush Foreground { get; set; } = Brushes.White; // В XAML настроен Fallback
-        public FontWeight FontWeight { get; set; } = FontWeights.Normal;
-        public FontStyle FontStyle { get; set; } = FontStyles.Normal;
-    }
-
-    public enum HgDisplayMode
-    {
-        Uncommitted,
-        Branch,
-        BaseBranchHead,
-        CustomBranch
-    }
-
-    public class EnumToBooleanConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
-        {
-            return value?.Equals(parameter);
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
-        {
-            return value?.Equals(true) == true ? parameter : DependencyProperty.UnsetValue;
-        }
-    }
 }

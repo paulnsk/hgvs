@@ -1,19 +1,22 @@
-﻿<UserControl x:Class="FileCopyExtension.HgToolWindowControl"
+﻿<UserControl x:Class="FileCopyExtension.Views.HgToolWindowControl"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:vsshell="clr-namespace:Microsoft.VisualStudio.Shell;assembly=Microsoft.VisualStudio.Shell.15.0"
              xmlns:local="clr-namespace:FileCopyExtension"
+             xmlns:viewmodels="clr-namespace:FileCopyExtension.ViewModels"
+             xmlns:views="clr-namespace:FileCopyExtension.Views"
+             xmlns:models="clr-namespace:FileCopyExtension.Models"
              Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
              Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="600">
 
     <UserControl.Resources>
-        <local:StatusToColorConverter x:Key="StatusColorConverter"/>
-        <local:InverseBooleanConverter x:Key="InverseBoolConverter"/>
-        <local:EnumToBooleanConverter x:Key="EnumToBoolConverter"/>
+        <views:StatusToColorConverter x:Key="StatusColorConverter"/>
+        <views:InverseBooleanConverter x:Key="InverseBoolConverter"/>
+        <viewmodels:EnumToBooleanConverter x:Key="EnumToBoolConverter"/>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
         <Style TargetType="ListViewItem">
@@ -84,9 +87,9 @@
             <Button Content="Undo Changes" Width="90" Height="25" 
                     Command="{Binding UndoCommand}" CommandParameter="{Binding SelectedItems, ElementName=lvFiles}">
                 <Button.Visibility>
-                    <Binding Path="SelectedMode" ConverterParameter="{x:Static local:HgDisplayMode.Uncommitted}">
+                    <Binding Path="SelectedMode" ConverterParameter="{x:Static models:HgDisplayMode.Uncommitted}">
                         <Binding.Converter>
-                            <local:EnumToBooleanConverter/>
+                            <viewmodels:EnumToBooleanConverter/>
                         </Binding.Converter>
                     </Binding>
                 </Button.Visibility>
@@ -96,15 +99,15 @@
         <!-- 2. Options -->
         <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="5,0,5,5" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}">
             <RadioButton Content="Uncommitted Only" GroupName="Mode" Style="{StaticResource OptionStyle}"
-                 IsChecked="{Binding SelectedMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter={x:Static local:HgDisplayMode.Uncommitted}}"/>
+                 IsChecked="{Binding SelectedMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter={x:Static models:HgDisplayMode.Uncommitted}}"/>
             <RadioButton Content="Entire Branch (vs Parent)" GroupName="Mode" Style="{StaticResource OptionStyle}"
-                 IsChecked="{Binding SelectedMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter={x:Static local:HgDisplayMode.Branch}}"/>
+                 IsChecked="{Binding SelectedMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter={x:Static models:HgDisplayMode.Branch}}"/>
             <RadioButton Content="Vs Parent Branch HEAD" GroupName="Mode" Style="{StaticResource OptionStyle}"
-                 IsChecked="{Binding SelectedMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter={x:Static local:HgDisplayMode.BaseBranchHead}}"/>
+                 IsChecked="{Binding SelectedMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter={x:Static models:HgDisplayMode.BaseBranchHead}}"/>
 
             <StackPanel Orientation="Horizontal" Margin="0,0,10,0" VerticalAlignment="Center">
                 <RadioButton Content="vs " GroupName="Mode" Style="{StaticResource OptionStyle}" Margin="0"
-                     IsChecked="{Binding SelectedMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter={x:Static local:HgDisplayMode.CustomBranch}}"/>
+                     IsChecked="{Binding SelectedMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter={x:Static models:HgDisplayMode.CustomBranch}}"/>
                 <TextBox Width="100" Text="{Binding CompareBranchName, UpdateSourceTrigger=PropertyChanged}" 
                  Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
                  BorderBrush="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}"
@@ -113,7 +116,7 @@
                         <Style TargetType="TextBox">
                             <Setter Property="Foreground" Value="Gray"/>
                             <Style.Triggers>
-                                <DataTrigger Binding="{Binding SelectedMode}" Value="{x:Static local:HgDisplayMode.CustomBranch}">
+                                <DataTrigger Binding="{Binding SelectedMode}" Value="{x:Static models:HgDisplayMode.CustomBranch}">
                                     <Setter Property="Foreground" Value="#FF87CEFA"/>
                                 </DataTrigger>
                             </Style.Triggers>
