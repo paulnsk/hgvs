@@ -27,6 +27,7 @@ namespace FileCopyExtension
     [Guid(PackageGuidString)]
     [ProvideMenuResource("Menus.ctmenu", 1)]
     [ProvideToolWindow(typeof(HgToolWindow))]
+    [ProvideToolWindow(typeof(HgHistoryToolWindow))]
     public sealed class FileCopyExtensionPackage : AsyncPackage
     {
         /// <summary>
@@ -52,6 +53,7 @@ namespace FileCopyExtension
             // HgOpenFilesCommand removed
             await TotalCmdDumpCommand.InitializeAsync(this);
             await HgToolWindowCommand.InitializeAsync(this);
+            await HgHistoryCommand.InitializeAsync(this);
         }
 
         #endregion

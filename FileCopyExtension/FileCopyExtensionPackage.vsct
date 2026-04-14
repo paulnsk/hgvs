@@ -39,6 +39,12 @@
       <Group guid="guidFileCopyExtensionPackageCmdSet" id="MyMenuGroup" priority="0x0600">
         <Parent guid="guidSHLMainMenu" id="IDM_VS_MENU_TOOLS"/>
       </Group>
+	    <Group guid="guidFileCopyExtensionPackageCmdSet" id="MySolutionExplorerGroup" priority="0x0600">
+		    <Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_ITEMNODE"/>
+	    </Group>
+	    <Group guid="guidFileCopyExtensionPackageCmdSet" id="MyDocTabGroup" priority="0x0600">
+		    <Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_EZDOCWINTAB"/>
+	    </Group>
     </Groups>
 
     <!--Buttons section. -->
@@ -52,13 +58,13 @@
               <CommandFlag>DefaultInvisible</CommandFlag>
               <CommandFlag>DynamicVisibility</CommandFlag>
           If you do not want an image next to your command, remove the Icon node /> -->
-		<Button guid="guidFileCopyExtensionPackageCmdSet" id="FileCopyCommandId" priority="0x0100" type="Button">
-			<Parent guid="guidFileCopyExtensionPackageCmdSet" id="MyMenuGroup" />
-			<Icon guid="guidImages" id="bmpPic1" />
-			<Strings>
-				<ButtonText>== DUMP open files! ==</ButtonText>
-			</Strings>
-		</Button>
+      <Button guid="guidFileCopyExtensionPackageCmdSet" id="FileCopyCommandId" priority="0x0100" type="Button">
+	      <Parent guid="guidFileCopyExtensionPackageCmdSet" id="MyMenuGroup" />
+	      <Icon guid="guidImages" id="bmpPic1" />
+	      <Strings>
+		      <ButtonText>== DUMP open files! ==</ButtonText>
+	      </Strings>
+      </Button>
       <!-- Renamed and repurposed ID 0x0101 -->
       <Button guid="guidFileCopyExtensionPackageCmdSet" id="TotalCmdDumpCommandId" priority="0x0101" type="Button">
 	      <Parent guid="guidFileCopyExtensionPackageCmdSet" id="MyMenuGroup" />
@@ -72,6 +78,20 @@
 	      <Icon guid="guidImages" id="bmpPicSearch" />
 	      <Strings>
 		      <ButtonText>== Show HG Changes Window ==</ButtonText>
+	      </Strings>
+      </Button>
+      <Button guid="guidFileCopyExtensionPackageCmdSet" id="HgHistoryCommandId" priority="0x0100" type="Button">
+	      <Parent guid="guidFileCopyExtensionPackageCmdSet" id="MySolutionExplorerGroup" />
+	      <Icon guid="guidImages" id="bmpPicSearch" />
+	      <Strings>
+		      <ButtonText>HG History</ButtonText>
+	      </Strings>
+      </Button>
+      <Button guid="guidFileCopyExtensionPackageCmdSet" id="HgHistoryCommandId" priority="0x0100" type="Button">
+	      <Parent guid="guidFileCopyExtensionPackageCmdSet" id="MyDocTabGroup" />
+	      <Icon guid="guidImages" id="bmpPicSearch" />
+	      <Strings>
+		      <ButtonText>HG History</ButtonText>
 	      </Strings>
       </Button>
     </Buttons>
@@ -97,6 +117,9 @@
       <IDSymbol name="FileCopyCommandId" value="0x0100" />
       <IDSymbol name="TotalCmdDumpCommandId" value="0x0101" />
       <IDSymbol name="HgToolWindowCommandId" value="0x0102" />
+      <IDSymbol name="MySolutionExplorerGroup" value="0x1030" />
+      <IDSymbol name="MyDocTabGroup" value="0x1040" />
+      <IDSymbol name="HgHistoryCommandId" value="0x0103" />
 	</GuidSymbol>
 
     <GuidSymbol name="guidImages" value="{74d29bde-98fa-46f0-81be-b6ff3b7f308a}" >
