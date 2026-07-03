@@ -54,6 +54,7 @@
     <Compile Include="ViewModels\EnumToBooleanConverter.cs" />
     <Compile Include="Models\HgDisplayMode.cs" />
     <Compile Include="Models\HgFileItem.cs" />
+    <Compile Include="Models\HgOutputDecoder.cs" />
     <Compile Include="ViewModels\HgToolWindowViewModel.cs" />
     <Compile Include="FileCopyCommand.cs" />
     <Compile Include="FileDumpLogic.cs" />

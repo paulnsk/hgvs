@@ -26,6 +26,7 @@ namespace FileCopyExtension.ViewModels
         private readonly DispatcherTimer _debounceTimer;
         private WritableSettingsStore _settingsStore;
         private string _currentBaseRev = ".";
+        private string _currentBaseRevDescription = "";
 
         // --- Команды ---
         public RelayCommand RefreshCommand { get; }
@@ -280,6 +281,10 @@ namespace FileCopyExtension.ViewModels
                 else
                 {
                     _currentBaseRev = result.TargetRev;
+                    var bParts = result.BaseInfo.Split(new[] { '|' }, 3);
+                    _currentBaseRevDescription = bParts.Length >= 2
+                        ? bParts[1] + (bParts.Length >= 3 ? ": " + bParts[2] : "")
+                        : result.TargetRev;
                     foreach (var item in result.Files) Files.Add(item);
 
                     StatusRuns.Clear();
@@ -351,7 +356,33 @@ namespace FileCopyExtension.ViewModels
                 if (item is HgFileItem hgItem) selectedItems.Add(hgItem);
 
             var msgBuilder = new StringBuilder();
-            msgBuilder.AppendLine($"Вы уверены, что хотите откатить изменения (revert) для {selectedItems.Count} файлов?\n");
+
+            if (SelectedMode == HgDisplayMode.Uncommitted)
+            {
+                msgBuilder.AppendLine($"Вы уверены, что хотите откатить незакоммиченные изменения (revert) для {selectedItems.Count} файлов?\n");
+            }
+            else
+            {
+                string targetDesc;
+                switch (SelectedMode)
+                {
+                    case HgDisplayMode.Branch:
+                        targetDesc = $"точке ответвления ветки ({_currentBaseRevDescription})";
+                        break;
+                    case HgDisplayMode.BaseBranchHead:
+                        targetDesc = $"голове родительской ветки ({_currentBaseRevDescription})";
+                        break;
+                    case HgDisplayMode.CustomBranch:
+                        targetDesc = $"ветке {CompareBranchName} ({_currentBaseRevDescription})";
+                        break;
+                    default:
+                        targetDesc = _currentBaseRevDescription;
+                        break;
+                }
+                msgBuilder.AppendLine($"Вы уверены, что хотите вернуть {selectedItems.Count} файлов к {targetDesc}?\n");
+                msgBuilder.AppendLine("Все изменения файлов с этого момента (включая незакоммиченные) будут потеряны.");
+            }
+
             var maxDisplay = 15;
             for (var i = 0; i < selectedItems.Count; i++)
             {
@@ -372,6 +403,8 @@ namespace FileCopyExtension.ViewModels
             {
                 IsBusy = true;
                 var args = new StringBuilder("revert --no-backup");
+                if (SelectedMode != HgDisplayMode.Uncommitted)
+                    args.Append($" -r \"{_currentBaseRev}\"");
                 foreach (var item in selectedItems) args.Append($" \"{item.Path}\"");
 
                 await Task.Run(() =>
@@ -392,7 +425,7 @@ namespace FileCopyExtension.ViewModels
             }
         }
 
-        private bool CanUndo(System.Collections.IList items) => SelectedMode == HgDisplayMode.Uncommitted && items != null && items.Count > 0 && !IsBusy;
+        private bool CanUndo(System.Collections.IList items) => items != null && items.Count > 0 && !IsBusy;
 
         private async Task OpenFileAsync(HgFileItem item)
         {
@@ -496,12 +529,24 @@ namespace FileCopyExtension.ViewModels
                     {
                         using (var fs = new FileStream(outputFile, FileMode.Create, FileAccess.Write))
                             process.StandardOutput.BaseStream.CopyTo(fs);
-                        error = process.StandardError.ReadToEnd();
+                        using (var ms = new MemoryStream())
+                        {
+                            process.StandardError.BaseStream.CopyTo(ms);
+                            error = HgOutputDecoder.Decode(ms.ToArray());
+                        }
                     }
                     else
                     {
-                        output = process.StandardOutput.ReadToEnd();
-                        error = process.StandardError.ReadToEnd();
+                        using (var ms = new MemoryStream())
+                        {
+                            process.StandardOutput.BaseStream.CopyTo(ms);
+                            output = HgOutputDecoder.Decode(ms.ToArray());
+                        }
+                        using (var ms = new MemoryStream())
+                        {
+                            process.StandardError.BaseStream.CopyTo(ms);
+                            error = HgOutputDecoder.Decode(ms.ToArray());
+                        }
                     }
                     process.WaitForExit();
                     return process.ExitCode == 0;

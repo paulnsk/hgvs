@@ -85,15 +85,7 @@
             <Button Content="Refresh" Width="80" Height="25" Margin="0,0,5,0" Command="{Binding RefreshCommand}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"/>
             <Button Content="Open All" Width="80" Height="25" Margin="0,0,5,0" Command="{Binding OpenAllCommand}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"/>
             <Button Content="Undo Changes" Width="90" Height="25" 
-                    Command="{Binding UndoCommand}" CommandParameter="{Binding SelectedItems, ElementName=lvFiles}">
-                <Button.Visibility>
-                    <Binding Path="SelectedMode" ConverterParameter="{x:Static models:HgDisplayMode.Uncommitted}">
-                        <Binding.Converter>
-                            <viewmodels:EnumToBooleanConverter/>
-                        </Binding.Converter>
-                    </Binding>
-                </Button.Visibility>
-            </Button>
+                    Command="{Binding UndoCommand}" CommandParameter="{Binding SelectedItems, ElementName=lvFiles}"/>
         </StackPanel>
 
         <!-- 2. Options -->

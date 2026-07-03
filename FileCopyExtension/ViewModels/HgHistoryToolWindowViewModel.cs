@@ -296,12 +296,24 @@ namespace FileCopyExtension.ViewModels
                     {
                         using (var fs = new FileStream(outputFile, FileMode.Create, FileAccess.Write))
                             process.StandardOutput.BaseStream.CopyTo(fs);
-                        error = process.StandardError.ReadToEnd();
+                        using (var ms = new MemoryStream())
+                        {
+                            process.StandardError.BaseStream.CopyTo(ms);
+                            error = HgOutputDecoder.Decode(ms.ToArray());
+                        }
                     }
                     else
                     {
-                        output = process.StandardOutput.ReadToEnd();
-                        error = process.StandardError.ReadToEnd();
+                        using (var ms = new MemoryStream())
+                        {
+                            process.StandardOutput.BaseStream.CopyTo(ms);
+                            output = HgOutputDecoder.Decode(ms.ToArray());
+                        }
+                        using (var ms = new MemoryStream())
+                        {
+                            process.StandardError.BaseStream.CopyTo(ms);
+                            error = HgOutputDecoder.Decode(ms.ToArray());
+                        }
                     }
                     process.WaitForExit();
                     return process.ExitCode == 0;
