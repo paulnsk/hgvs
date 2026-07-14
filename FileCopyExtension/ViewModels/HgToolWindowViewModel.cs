@@ -260,7 +260,21 @@ namespace FileCopyExtension.ViewModels
                         foreach (var line in lines)
                         {
                             if (line.Length > 2)
-                                fileList.Add(new HgFileItem { Status = line.Substring(0, 1), Path = line.Substring(2).Trim() });
+                            {
+                                var status = line.Substring(0, 1);
+                                var path = line.Substring(2).Trim();
+
+                                // Отфильтровываем ложные изменения: если статус M, но реальный diff пустой - игнорируем
+                                if (status == "M")
+                                {
+                                    if (RunHgCommand(repoRoot, $"diff --rev \"{targetRev}\" \"{path}\"", out var diffOutput, out _) && string.IsNullOrWhiteSpace(diffOutput))
+                                    {
+                                        continue;
+                                    }
+                                }
+
+                                fileList.Add(new HgFileItem { Status = status, Path = path });
+                            }
                         }
                     }
                     else
