@@ -253,6 +253,8 @@ namespace FileCopyExtension.ViewModels
 
                     var flags = "-ma";
                     if (isShowUntracked) flags += "u";
+                    // Получаем реально измененные файлы 
+                    var actuallyModified = GetActuallyModifiedFiles(repoRoot, targetRev);
 
                     if (RunHgCommand(repoRoot, "status --rev \"" + targetRev + "\" " + flags, out var output, out var statusError))
                     {
@@ -264,16 +266,15 @@ namespace FileCopyExtension.ViewModels
                                 var status = line.Substring(0, 1);
                                 var path = line.Substring(2).Trim();
 
-                                // Отфильтровываем ложные изменения: если статус M, но реальный diff пустой - игнорируем
-                                if (status == "M")
+                                var normalizedPath = path.Replace('/', '\\');
+                                var isUnchanged = status == "M" && !actuallyModified.Contains(normalizedPath);
+
+                                if (isUnchanged)
                                 {
-                                    if (RunHgCommand(repoRoot, $"diff --rev \"{targetRev}\" \"{path}\"", out var diffOutput, out _) && string.IsNullOrWhiteSpace(diffOutput))
-                                    {
-                                        continue;
-                                    }
+                                    status = "♦";
                                 }
 
-                                fileList.Add(new HgFileItem { Status = status, Path = path });
+                                fileList.Add(new HgFileItem { Status = status, Path = path, IsUnchanged = isUnchanged });
                             }
                         }
                     }
@@ -584,6 +585,28 @@ namespace FileCopyExtension.ViewModels
                 dir = dir.Parent;
             }
             return null;
+        }
+
+        private System.Collections.Generic.HashSet<string> GetActuallyModifiedFiles(string repoRoot, string targetRev)
+        {
+            var actuallyModified = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (RunHgCommand(repoRoot, $"diff --stat --rev \"{targetRev}\"", out var diffOutput, out _))
+            {
+                var lines = diffOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (var line in lines)
+                {
+                    var pipeIndex = line.LastIndexOf('|');
+                    if (pipeIndex > 0)
+                    {
+                        var path = line.Substring(0, pipeIndex).Trim();
+                        // Унифицируем слеши для надежного сравнения
+                        path = path.Replace('/', '\\');
+                        actuallyModified.Add(path);
+                    }
+                }
+            }
+            return actuallyModified;
         }
     }
 

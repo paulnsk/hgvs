@@ -127,7 +127,8 @@ namespace FileCopyExtension.Views
             if (status == "M") return Brushes.CornflowerBlue;
             if (status == "R") return Brushes.IndianRed;
             if (status == "?") return Brushes.MediumOrchid;
-            return null; // В XAML настроен Fallback на дефолтный цвет
+            if (status == "♦") return Brushes.Gray;
+            return null;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotImplementedException();

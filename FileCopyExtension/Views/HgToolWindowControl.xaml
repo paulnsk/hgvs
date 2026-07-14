@@ -24,16 +24,31 @@
             <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
             <EventSetter Event="MouseDoubleClick" Handler="LvFiles_MouseDoubleClick"/>
             <Style.Triggers>
+                <!-- 1. Обычное выделение (устанавливает фон и яркий текст) -->
                 <Trigger Property="IsSelected" Value="True">
                     <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.HighlightKey}}"/>
                     <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.HighlightTextKey}}"/>
                 </Trigger>
+
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarHoverKey}}"/>
                 </Trigger>
+
+                <!-- 2. Блеклый цвет для неизмененных файлов без фокуса -->
+                <DataTrigger Binding="{Binding IsUnchanged}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.DropDownDisabledGlyphKey}}"/>
+                </DataTrigger>
+
+                <!-- 3. Блеклый цвет для неизмененных файлов ДАЖЕ В ФОКУСЕ (перекрывает Trigger выше) -->
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsSelected}" Value="True"/>
+                        <Condition Binding="{Binding IsUnchanged}" Value="True"/>
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.DropDownDisabledGlyphKey}}"/>
+                </MultiDataTrigger>
             </Style.Triggers>
         </Style>
-
         <Style TargetType="Button">
             <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"/>
             <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
