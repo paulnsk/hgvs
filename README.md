@@ -1,6 +1,6 @@
 # HgVs
 
-HgVs is a Visual Studio 2022 extension that adds practical Mercurial tools directly to the IDE.
+HgVs is a Visual Studio 2022 and Visual Studio 2026 extension that adds practical Mercurial tools directly to the IDE.
 
 ## Features
 
@@ -14,7 +14,7 @@ HgVs is a Visual Studio 2022 extension that adds practical Mercurial tools direc
 
 ## Requirements
 
-- Visual Studio 2022 (17.x).
+- Visual Studio 2022 (17.x) or Visual Studio 2026 (18.x).
 - .NET Framework 4.7.2.
 - Mercurial command-line client available as `hg` on `PATH`.
 
@@ -24,15 +24,11 @@ Restore packages and build the solution with Visual Studio 2022 MSBuild:
 
 ```powershell
 msbuild HgVs.sln /t:Restore
-msbuild HgVs.sln /t:Build /p:Configuration=Debug /p:Platform="Any CPU" /p:DeployExtension=false
+msbuild HgVs.sln /t:Build /p:Configuration=Release /p:Platform="Any CPU" /p:DeployExtension=false
 ```
 
 The resulting extension package is written to:
 
 ```text
-HgVs\bin\Debug\HgVs.vsix
+HgVs\bin\Release\HgVs.vsix
 ```
-
-## Installation
-
-Close all Visual Studio instances, run the generated `HgVs.vsix`, and follow the VSIX Installer prompts. If the older FileCopyExtension build is installed, uninstall it to avoid duplicate commands.
