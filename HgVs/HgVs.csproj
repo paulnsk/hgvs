@@ -60,6 +60,7 @@
     <Compile Include="FileDumpLogic.cs" />
     <Compile Include="HgToolWindow.cs" />
     <Compile Include="HgToolWindowCommand.cs" />
+    <Compile Include="LocateInHgToolWindowCommand.cs" />
     <Compile Include="ViewModels\ObservableObject.cs" />
     <Compile Include="ViewModels\RelayCommand.cs" />
     <Compile Include="Models\StatusRun.cs" />

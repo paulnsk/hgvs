@@ -53,6 +53,7 @@ namespace HgVs
             // HgOpenFilesCommand removed
             await TotalCmdDumpCommand.InitializeAsync(this);
             await HgToolWindowCommand.InitializeAsync(this);
+            await LocateInHgToolWindowCommand.InitializeAsync(this);
             await HgHistoryCommand.InitializeAsync(this);
         }
 

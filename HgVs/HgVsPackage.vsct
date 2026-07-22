@@ -94,6 +94,13 @@
 		      <ButtonText>HG History</ButtonText>
 	      </Strings>
       </Button>
+      <Button guid="guidHgVsPackageCmdSet" id="LocateInHgToolWindowCommandId" priority="0x0100" type="Button">
+        <CommandFlag>CommandWellOnly</CommandFlag>
+        <Strings>
+          <ButtonText>Locate in HG Modified Files</ButtonText>
+          <LocCanonicalName>.HgVs.LocateInHgModifiedFiles</LocCanonicalName>
+        </Strings>
+      </Button>
     </Buttons>
 
     <!--The bitmaps section is used to define the bitmaps that are used for the commands.-->
@@ -106,6 +113,11 @@
       <Bitmap guid="guidImages" href="Resources\FileCopyCommand.png" usedList="bmpPic1, bmpPic2, bmpPicSearch, bmpPicX, bmpPicArrows, bmpPicStrikethrough"/>
     </Bitmaps>
   </Commands>
+
+  <KeyBindings>
+    <KeyBinding guid="guidHgVsPackageCmdSet" id="LocateInHgToolWindowCommandId"
+                editor="guidVSStd97" key1="K" mod1="Alt Shift" />
+  </KeyBindings>
 
   <Symbols>
     <!-- This is the package guid. -->
@@ -120,6 +132,7 @@
       <IDSymbol name="MySolutionExplorerGroup" value="0x1030" />
       <IDSymbol name="MyDocTabGroup" value="0x1040" />
       <IDSymbol name="HgHistoryCommandId" value="0x0103" />
+      <IDSymbol name="LocateInHgToolWindowCommandId" value="0x0104" />
 	</GuidSymbol>
 
     <GuidSymbol name="guidImages" value="{74d29bde-98fa-46f0-81be-b6ff3b7f308a}" >

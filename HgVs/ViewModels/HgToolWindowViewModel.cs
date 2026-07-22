@@ -123,6 +123,25 @@ namespace HgVs.ViewModels
             set { if (SetProperty(ref _showUntracked, value)) RefreshCommand.Execute(null); }
         }
 
+        private bool _hideUnchanged;
+        public bool HideUnchanged
+        {
+            get => _hideUnchanged;
+            set
+            {
+                if (!SetProperty(ref _hideUnchanged, value)) return;
+                RefreshViewPreservingSelection();
+                SaveSettings();
+            }
+        }
+
+        private bool _hasUnchangedFiles;
+        public bool HasUnchangedFiles
+        {
+            get => _hasUnchangedFiles;
+            private set => SetProperty(ref _hasUnchangedFiles, value);
+        }
+
         private string _filterText = "";
         public string FilterText
         {
@@ -200,6 +219,7 @@ namespace HgVs.ViewModels
                 if (_settingsStore.PropertyExists(CollectionName, "Filter")) FilterText = _settingsStore.GetString(CollectionName, "Filter");
                 if (_settingsStore.PropertyExists(CollectionName, "Exclude")) ExcludeText = _settingsStore.GetString(CollectionName, "Exclude");
                 if (_settingsStore.PropertyExists(CollectionName, "CompareBranch")) CompareBranchName = _settingsStore.GetString(CollectionName, "CompareBranch");
+                if (_settingsStore.PropertyExists(CollectionName, "HideUnchanged")) _hideUnchanged = _settingsStore.GetBoolean(CollectionName, "HideUnchanged");
             }
             catch { /* Ignore */ }
         }
@@ -214,6 +234,7 @@ namespace HgVs.ViewModels
                 _settingsStore.SetString(CollectionName, "Filter", FilterText ?? "");
                 _settingsStore.SetString(CollectionName, "Exclude", ExcludeText ?? "");
                 _settingsStore.SetString(CollectionName, "CompareBranch", CompareBranchName ?? "");
+                _settingsStore.SetBoolean(CollectionName, "HideUnchanged", HideUnchanged);
             }
             catch { /* Ignore */ }
         }
@@ -222,9 +243,24 @@ namespace HgVs.ViewModels
         {
             if (!(item is HgFileItem fileItem)) return false;
 
+            if (HideUnchanged && fileItem.IsUnchanged) return false;
             if (!string.IsNullOrWhiteSpace(ExcludeText) && CheckMatch(fileItem.Path, ExcludeText)) return false;
             if (string.IsNullOrWhiteSpace(FilterText)) return true;
             return CheckMatch(fileItem.Path, FilterText);
+        }
+
+        private void RefreshViewPreservingSelection()
+        {
+            var oldViewItems = FilesView.Cast<HgFileItem>().ToList();
+            var oldViewIndex = SelectedItem == null ? -1 : oldViewItems.IndexOf(SelectedItem);
+
+            FilesView.Refresh();
+            if (SelectedItem == null || FilesView.Contains(SelectedItem)) return;
+
+            var newViewItems = FilesView.Cast<HgFileItem>().ToList();
+            SelectedItem = newViewItems.Count == 0
+                ? null
+                : newViewItems[Math.Min(Math.Max(oldViewIndex, 0), newViewItems.Count - 1)];
         }
 
         private bool CheckMatch(string path, string patterns)
@@ -569,6 +605,7 @@ namespace HgVs.ViewModels
                 selection = newViewItems[Math.Min(oldViewIndex, newViewItems.Count - 1)];
 
             SelectedItem = selection;
+            HasUnchangedFiles = Files.Any(item => item.IsUnchanged);
         }
 
         private sealed class TodoFileState
@@ -602,11 +639,13 @@ namespace HgVs.ViewModels
                 {
                     _sourceFiles.Clear();
                     Files.Clear();
+                    HasUnchangedFiles = false;
                     SetSimpleStatus("Error: Branch name cannot be empty.");
                     return;
                 }
 
                 Files.Clear();
+                HasUnchangedFiles = false;
                 SetSimpleStatus("Loading...");
 
                 var dte = (DTE2)ServiceProvider.GlobalProvider.GetService(typeof(DTE));
@@ -757,6 +796,64 @@ namespace HgVs.ViewModels
                 IsBusy = false;
                 UndoCommand.NotifyCanExecuteChanged();
             }
+        }
+
+        public async Task EnsureItemsLoadedAsync()
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+            while (_isRefreshing)
+                await Task.Delay(50);
+
+            if (_sourceFiles.Count == 0)
+                await RefreshAsync();
+
+            while (_isRefreshing)
+                await Task.Delay(50);
+
+            if (!IsTodoMode) return;
+
+            while (_isTodoRefreshRunning)
+                await Task.Delay(50);
+
+            await RefreshTodoItemsAsync(true);
+
+            while (_isTodoRefreshRunning)
+                await Task.Delay(50);
+        }
+
+        public HgFileItem FindVisibleItem(string fullPath, int caretLine)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            if (string.IsNullOrEmpty(_repoRoot) || string.IsNullOrEmpty(fullPath)) return null;
+
+            string normalizedFullPath;
+            try { normalizedFullPath = Path.GetFullPath(fullPath); }
+            catch { return null; }
+
+            var candidates = FilesView.Cast<HgFileItem>()
+                .Where(item =>
+                {
+                    try
+                    {
+                        var itemFullPath = Path.GetFullPath(Path.Combine(_repoRoot, item.Path));
+                        return string.Equals(itemFullPath, normalizedFullPath, StringComparison.OrdinalIgnoreCase);
+                    }
+                    catch
+                    {
+                        return false;
+                    }
+                })
+                .ToList();
+
+            if (!IsTodoMode)
+                return candidates.FirstOrDefault();
+
+            return candidates
+                .Where(item => item.IsTodoItem)
+                .OrderBy(item => Math.Abs(item.LineNumber - caretLine))
+                .ThenBy(item => item.LineNumber)
+                .FirstOrDefault();
         }
 
         private async Task OpenAllAsync()

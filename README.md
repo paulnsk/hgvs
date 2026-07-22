@@ -12,6 +12,12 @@ HgVs is a Visual Studio 2022 and Visual Studio 2026 extension that adds practica
 - Revert selected changes.
 - Export open editor files to a directory or Total Commander.
 
+## Keyboard shortcut
+
+Press `Alt+Shift+K` to locate the active editor file in the HG Modified Files window. In TODO mode, HgVs selects the TODO item nearest to the editor caret.
+
+The Visual Studio command is `HgVs.LocateInHgModifiedFiles`. To change its shortcut, open `Tools > Options > Environment > Keyboard` and search for that command name.
+
 ## Requirements
 
 - Visual Studio 2022 (17.x) or Visual Studio 2026 (18.x).

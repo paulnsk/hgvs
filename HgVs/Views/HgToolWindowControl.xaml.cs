@@ -67,6 +67,20 @@ namespace HgVs.Views
             }
         }
 
+        public void FocusItem(HgFileItem item)
+        {
+            if (item == null) return;
+
+            lvFiles.SelectedItem = item;
+            lvFiles.ScrollIntoView(item);
+            lvFiles.UpdateLayout();
+
+            if (lvFiles.ItemContainerGenerator.ContainerFromItem(item) is ListViewItem container)
+                container.Focus();
+            else
+                lvFiles.Focus();
+        }
+
         private void LvFiles_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (DataContext is HgToolWindowViewModel vm)
