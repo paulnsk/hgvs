@@ -72,6 +72,7 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="FileCopyExtensionPackage.cs" />
     <Compile Include="TotalCmdDumpCommand.cs" />
+    <Compile Include="Models\HgListMode.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="source.extension.vsixmanifest">

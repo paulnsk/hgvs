@@ -19,7 +19,43 @@ namespace FileCopyExtension.Views
         public HgToolWindowControl()
         {
             InitializeComponent();
-            DataContext = new HgToolWindowViewModel();
+            var viewModel = new HgToolWindowViewModel();
+            DataContext = viewModel;
+            viewModel.PropertyChanged += ViewModel_PropertyChanged;
+            SizeChanged += (_, __) => UpdateColumnWidths();
+            Loaded += (_, __) => UpdateColumnWidths();
+        }
+
+        private void ViewModel_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(HgToolWindowViewModel.SelectedListMode))
+            {
+                _lastSortPropertyName = null;
+                _lastDirection = ListSortDirection.Ascending;
+                ClearSortIndicators();
+                var view = CollectionViewSource.GetDefaultView(lvFiles.ItemsSource);
+                view?.SortDescriptions.Clear();
+                UpdateColumnWidths();
+            }
+            else if (e.PropertyName == nameof(HgToolWindowViewModel.SelectedItem) &&
+                     sender is HgToolWindowViewModel vm &&
+                     vm.SelectedItem != null)
+            {
+                lvFiles.ScrollIntoView(vm.SelectedItem);
+            }
+        }
+
+        private void UpdateColumnWidths()
+        {
+            if (GroupColumn == null || TodoColumn == null || FileColumn == null || lvFiles == null) return;
+            var isTodoMode = DataContext is HgToolWindowViewModel vm && vm.IsTodoMode;
+            GroupColumn.Width = isTodoMode ? 12 : 0;
+            var availableWidth = Math.Max(160, lvFiles.ActualWidth - (isTodoMode ? 70 : 58));
+
+            TodoColumn.Width = isTodoMode ? Math.Max(120, availableWidth * 0.68) : 0;
+            FileColumn.Width = isTodoMode
+                ? Math.Max(100, availableWidth - TodoColumn.Width)
+                : availableWidth;
         }
 
         public void RefreshList()
@@ -56,7 +92,9 @@ namespace FileCopyExtension.Views
 
             if (DataContext is HgToolWindowViewModel vm)
             {
-                if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+                if (vm.IsTodoMode)
+                    vm.OpenFileCommand.Execute(hgItem);
+                else if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
                     vm.DiffFileCommand.Execute(hgItem);
                 else
                     vm.OpenFileCommand.Execute(hgItem);
@@ -99,6 +137,12 @@ namespace FileCopyExtension.Views
             var dataView = CollectionViewSource.GetDefaultView(lvFiles.ItemsSource);
             dataView.SortDescriptions.Clear();
             dataView.SortDescriptions.Add(new SortDescription(propertyName, direction));
+            if (DataContext is HgToolWindowViewModel vm && vm.IsTodoMode)
+            {
+                if (propertyName != "Path")
+                    dataView.SortDescriptions.Add(new SortDescription("Path", ListSortDirection.Ascending));
+                dataView.SortDescriptions.Add(new SortDescription("LineNumber", ListSortDirection.Ascending));
+            }
             dataView.Refresh();
 
             if (headerClicked.Content is string text)

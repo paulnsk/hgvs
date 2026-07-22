@@ -22,31 +22,61 @@
         <Style TargetType="ListViewItem">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="UseLayoutRounding" Value="True"/>
+            <Setter Property="ClipToBounds" Value="False"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ListViewItem}">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}"
+                                ClipToBounds="False"
+                                SnapsToDevicePixels="True">
+                            <Grid ClipToBounds="False" SnapsToDevicePixels="True">
+                                <GridViewRowPresenter
+                                    Content="{TemplateBinding Content}"
+                                    Columns="{Binding View.Columns, RelativeSource={RelativeSource AncestorType={x:Type ListView}}}"
+                                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                    SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                                <Border Width="5" HorizontalAlignment="Left" VerticalAlignment="Stretch"
+                                        Margin="2,-2,0,-2" Panel.ZIndex="1"
+                                        IsHitTestVisible="False" SnapsToDevicePixels="True">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="#FFC06B28"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsAlternateGroup}" Value="True">
+                                                    <Setter Property="Background" Value="#FF945DB7"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsTodoItem}" Value="False">
+                                                    <Setter Property="Background" Value="Transparent"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
             <EventSetter Event="MouseDoubleClick" Handler="LvFiles_MouseDoubleClick"/>
             <Style.Triggers>
-                <!-- 1. Обычное выделение (устанавливает фон и яркий текст) -->
-                <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.HighlightKey}}"/>
-                    <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.HighlightTextKey}}"/>
-                </Trigger>
-
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarHoverKey}}"/>
                 </Trigger>
 
-                <!-- 2. Блеклый цвет для неизмененных файлов без фокуса -->
-                <DataTrigger Binding="{Binding IsUnchanged}" Value="True">
-                    <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.DropDownDisabledGlyphKey}}"/>
-                </DataTrigger>
-
-                <!-- 3. Блеклый цвет для неизмененных файлов ДАЖЕ В ФОКУСЕ (перекрывает Trigger выше) -->
-                <MultiDataTrigger>
-                    <MultiDataTrigger.Conditions>
-                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsSelected}" Value="True"/>
-                        <Condition Binding="{Binding IsUnchanged}" Value="True"/>
-                    </MultiDataTrigger.Conditions>
-                    <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.DropDownDisabledGlyphKey}}"/>
-                </MultiDataTrigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.HighlightKey}}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.HighlightTextKey}}"/>
+                </Trigger>
             </Style.Triggers>
         </Style>
         <Style TargetType="Button">
@@ -96,12 +126,23 @@
         </Grid.RowDefinitions>
 
         <!-- 1. Buttons -->
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="5">
-            <Button Content="Refresh" Width="80" Height="25" Margin="0,0,5,0" Command="{Binding RefreshCommand}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"/>
-            <Button Content="Open All" Width="80" Height="25" Margin="0,0,5,0" Command="{Binding OpenAllCommand}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"/>
-            <Button Content="Undo Changes" Width="90" Height="25" 
-                    Command="{Binding UndoCommand}" CommandParameter="{Binding SelectedItems, ElementName=lvFiles}"/>
-        </StackPanel>
+        <DockPanel Grid.Row="0" Margin="5" LastChildFill="False">
+            <Border DockPanel.Dock="Right" BorderBrush="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}"
+                    BorderThickness="1" CornerRadius="3" Padding="7,3" Margin="8,0,0,0">
+                <StackPanel Orientation="Horizontal">
+                    <RadioButton Content="Files" GroupName="ListMode" Style="{StaticResource OptionStyle}" Margin="0,0,9,0"
+                         IsChecked="{Binding SelectedListMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter={x:Static models:HgListMode.Files}}"/>
+                    <RadioButton Content="TODO" GroupName="ListMode" Style="{StaticResource OptionStyle}" Margin="0"
+                         IsChecked="{Binding SelectedListMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter={x:Static models:HgListMode.Todo}}"/>
+                </StackPanel>
+            </Border>
+            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                <Button Content="Refresh" Width="80" Height="25" Margin="0,0,5,0" Command="{Binding RefreshCommand}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"/>
+                <Button Content="Open All" Width="80" Height="25" Margin="0,0,5,0" Command="{Binding OpenAllCommand}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"/>
+                <Button Content="Undo Changes" Width="90" Height="25"
+                        Command="{Binding UndoCommand}" CommandParameter="{Binding SelectedItems, ElementName=lvFiles}"/>
+            </StackPanel>
+        </DockPanel>
 
         <!-- 2. Options -->
         <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="5,0,5,5" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}">
@@ -190,12 +231,17 @@
 
         <!-- 6. File List -->
         <ListView Name="lvFiles" Grid.Row="5" Margin="5" ItemsSource="{Binding FilesView}"
+                  SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+                  SnapsToDevicePixels="True" UseLayoutRounding="True"
                   Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
                   Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"
                   BorderThickness="0" GridViewColumnHeader.Click="GridViewColumnHeader_Click"
                   SelectionChanged="LvFiles_SelectionChanged">
             <ListView.View>
                 <GridView>
+                    <GridViewColumn x:Name="GroupColumn" Width="0">
+                        <GridViewColumnHeader/>
+                    </GridViewColumn>
                     <GridViewColumn Width="40">
                         <GridViewColumnHeader Content="St" Tag="Status"/>
                         <GridViewColumn.CellTemplate>
@@ -204,11 +250,33 @@
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-                    <GridViewColumn Width="800">
+                    <GridViewColumn x:Name="TodoColumn" Width="0">
+                        <GridViewColumnHeader Content="TODO"/>
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding TodoText}" TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding TodoText}"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                    <GridViewColumn x:Name="FileColumn" Width="800">
                         <GridViewColumnHeader Content="File Path" Tag="Path"/>
-                        <GridViewColumn.DisplayMemberBinding>
-                            <Binding Path="Path"/>
-                        </GridViewColumn.DisplayMemberBinding>
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding DisplayPath}" TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding Path}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsUnchanged}" Value="True">
+                                                    <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.DropDownDisabledGlyphKey}}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
                     </GridViewColumn>
                 </GridView>
             </ListView.View>

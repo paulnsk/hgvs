@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.ObjectModel;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Windows;
 using System.Windows.Data;
@@ -24,9 +26,18 @@ namespace FileCopyExtension.ViewModels
     {
         private const string CollectionName = "FileCopyExtension_Filters";
         private readonly DispatcherTimer _debounceTimer;
+        private readonly DispatcherTimer _todoRefreshTimer;
+        private readonly DispatcherTimer _solutionRetryTimer;
+        private readonly List<HgFileItem> _sourceFiles = new List<HgFileItem>();
+        private readonly Dictionary<string, TodoFileState> _todoFileStates =
+            new Dictionary<string, TodoFileState>(StringComparer.OrdinalIgnoreCase);
         private WritableSettingsStore _settingsStore;
         private string _currentBaseRev = ".";
         private string _currentBaseRevDescription = "";
+        private string _repoRoot;
+        private bool _isTodoRefreshRunning;
+        private bool _isRefreshing;
+        private int _solutionRetryAttempts;
 
         // --- Команды ---
         public RelayCommand RefreshCommand { get; }
@@ -71,6 +82,40 @@ namespace FileCopyExtension.ViewModels
             }
         }
 
+        private HgListMode _selectedListMode = HgListMode.Files;
+        public HgListMode SelectedListMode
+        {
+            get => _selectedListMode;
+            set
+            {
+                if (!SetProperty(ref _selectedListMode, value)) return;
+
+                OnPropertyChanged(nameof(IsTodoMode));
+                UndoCommand.NotifyCanExecuteChanged();
+
+                if (value == HgListMode.Todo)
+                {
+                    _todoRefreshTimer.Start();
+                    if (!IsBusy)
+                        QueueTodoRefresh(true);
+                }
+                else
+                {
+                    _todoRefreshTimer.Stop();
+                    ShowFileItems();
+                }
+            }
+        }
+
+        public bool IsTodoMode => SelectedListMode == HgListMode.Todo;
+
+        private HgFileItem _selectedItem;
+        public HgFileItem SelectedItem
+        {
+            get => _selectedItem;
+            set => SetProperty(ref _selectedItem, value);
+        }
+
         private bool _showUntracked;
         public bool ShowUntracked
         {
@@ -113,6 +158,12 @@ namespace FileCopyExtension.ViewModels
 
             _debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
             _debounceTimer.Tick += DebounceTimer_Tick;
+
+            _todoRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
+            _todoRefreshTimer.Tick += TodoRefreshTimer_Tick;
+
+            _solutionRetryTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _solutionRetryTimer.Tick += SolutionRetryTimer_Tick;
 
             FilesView = CollectionViewSource.GetDefaultView(Files);
             FilesView.Filter = FileFilter;
@@ -187,8 +238,360 @@ namespace FileCopyExtension.ViewModels
             return false;
         }
 
+        private void TodoRefreshTimer_Tick(object sender, EventArgs e)
+        {
+            if (IsBusy || !IsTodoMode) return;
+            QueueTodoRefresh(false);
+        }
+
+        private void SolutionRetryTimer_Tick(object sender, EventArgs e)
+        {
+            if (IsBusy) return;
+            if (++_solutionRetryAttempts > 60)
+            {
+                _solutionRetryTimer.Stop();
+                SetSimpleStatus("No solution loaded");
+                return;
+            }
+
+            RefreshCommand.Execute(null);
+        }
+
+        private void QueueTodoRefresh(bool force)
+        {
+            ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            {
+                try
+                {
+                    await RefreshTodoItemsAsync(force);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("TODO refresh failed: " + ex);
+                }
+            }).FileAndForget("FileCopyExtension/TodoRefresh");
+        }
+
+        private void ShowFileItems()
+        {
+            SynchronizeDisplayedItems(_sourceFiles);
+        }
+
+        private async Task RefreshTodoItemsAsync(bool force)
+        {
+            if (!IsTodoMode || string.IsNullOrEmpty(_repoRoot) || _isTodoRefreshRunning) return;
+
+            _isTodoRefreshRunning = true;
+            try
+            {
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+                var dte = (DTE2)ServiceProvider.GlobalProvider.GetService(typeof(DTE));
+                var openDocuments = GetOpenTextDocuments(dte);
+                var snapshots = new List<TodoFileSnapshot>();
+
+                foreach (var source in _sourceFiles)
+                {
+                    var fullPath = Path.GetFullPath(Path.Combine(_repoRoot, source.Path));
+                    var lastWriteTimeUtc = File.Exists(fullPath)
+                        ? File.GetLastWriteTimeUtc(fullPath)
+                        : DateTime.MinValue;
+
+                    if (openDocuments.TryGetValue(fullPath, out var textDocument))
+                    {
+                        snapshots.Add(new TodoFileSnapshot
+                        {
+                            Source = source,
+                            FullPath = fullPath,
+                            Text = ReadTextDocument(textDocument),
+                            IsOpen = true,
+                            LastWriteTimeUtc = lastWriteTimeUtc
+                        });
+                        continue;
+                    }
+
+                    if (force ||
+                        !_todoFileStates.TryGetValue(source.Path, out var state) ||
+                        state.WasOpen ||
+                        state.LastWriteTimeUtc != lastWriteTimeUtc)
+                    {
+                        snapshots.Add(new TodoFileSnapshot
+                        {
+                            Source = source,
+                            FullPath = fullPath,
+                            IsOpen = false,
+                            LastWriteTimeUtc = lastWriteTimeUtc
+                        });
+                    }
+                }
+
+                var parsedSnapshots = await Task.Run(() =>
+                {
+                    foreach (var snapshot in snapshots)
+                    {
+                        var text = snapshot.Text;
+                        if (text == null && File.Exists(snapshot.FullPath))
+                        {
+                            try { text = File.ReadAllText(snapshot.FullPath); }
+                            catch { text = string.Empty; }
+                        }
+
+                        snapshot.Items = ParseTodoItems(snapshot.Source, text ?? string.Empty);
+                    }
+                    return snapshots;
+                });
+
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+                foreach (var snapshot in parsedSnapshots)
+                {
+                    _todoFileStates[snapshot.Source.Path] = new TodoFileState
+                    {
+                        Items = snapshot.Items,
+                        LastWriteTimeUtc = snapshot.LastWriteTimeUtc,
+                        WasOpen = snapshot.IsOpen
+                    };
+                }
+
+                if (!IsTodoMode) return;
+
+                var currentPaths = new HashSet<string>(
+                    _sourceFiles.Select(item => item.Path),
+                    StringComparer.OrdinalIgnoreCase);
+                foreach (var stalePath in _todoFileStates.Keys.Where(path => !currentPaths.Contains(path)).ToList())
+                    _todoFileStates.Remove(stalePath);
+
+                var todoItems = new List<HgFileItem>();
+                var groupIndex = 0;
+                foreach (var source in _sourceFiles)
+                {
+                    if (!_todoFileStates.TryGetValue(source.Path, out var state) || state.Items.Count == 0)
+                        continue;
+
+                    foreach (var item in state.Items)
+                    {
+                        item.FileGroupIndex = groupIndex;
+                        todoItems.Add(item);
+                    }
+                    groupIndex++;
+                }
+
+                SynchronizeDisplayedItems(todoItems);
+            }
+            finally
+            {
+                _isTodoRefreshRunning = false;
+            }
+        }
+
+        private static Dictionary<string, TextDocument> GetOpenTextDocuments(DTE2 dte)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            var result = new Dictionary<string, TextDocument>(StringComparer.OrdinalIgnoreCase);
+            if (dte == null) return result;
+
+            foreach (Document document in dte.Documents)
+            {
+                try
+                {
+                    if (string.IsNullOrEmpty(document.FullName)) continue;
+                    var textDocument = document.Object("TextDocument") as TextDocument;
+                    if (textDocument != null)
+                        result[Path.GetFullPath(document.FullName)] = textDocument;
+                }
+                catch
+                {
+                    // Some Visual Studio document types do not expose a text buffer.
+                }
+            }
+            return result;
+        }
+
+        private static string ReadTextDocument(TextDocument textDocument)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            try
+            {
+                var editPoint = textDocument.StartPoint.CreateEditPoint();
+                return editPoint.GetText(textDocument.EndPoint);
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        private static List<HgFileItem> ParseTodoItems(HgFileItem source, string text)
+        {
+            var result = new List<HgFileItem>();
+            if (text.IndexOf('\0') >= 0) return result;
+
+            var occurrences = new Dictionary<string, int>(StringComparer.Ordinal);
+            var lines = text.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None);
+            var inBlockComment = false;
+
+            for (var index = 0; index < lines.Length; index++)
+            {
+                var line = lines[index];
+                if (!ContainsTodoInComment(line, ref inBlockComment)) continue;
+
+                var identityText = line.Trim();
+                occurrences.TryGetValue(identityText, out var occurrence);
+                occurrences[identityText] = ++occurrence;
+
+                result.Add(new HgFileItem
+                {
+                    Status = source.Status,
+                    Path = source.Path,
+                    IsUnchanged = source.IsUnchanged,
+                    TodoText = FormatTodoText(line),
+                    LineNumber = index + 1,
+                    Identity = "todo|" + source.Path + "|" + identityText + "|" + occurrence
+                });
+            }
+
+            return result;
+        }
+
+        private static bool ContainsTodoInComment(string line, ref bool inBlockComment)
+        {
+            var position = 0;
+            while (position < line.Length)
+            {
+                if (inBlockComment)
+                {
+                    var blockEnd = line.IndexOf("*/", position, StringComparison.Ordinal);
+                    var commentEnd = blockEnd < 0 ? line.Length : blockEnd;
+                    if (line.IndexOf("todo", position, commentEnd - position, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        if (blockEnd >= 0) inBlockComment = false;
+                        return true;
+                    }
+
+                    if (blockEnd < 0) return false;
+                    inBlockComment = false;
+                    position = blockEnd + 2;
+                    continue;
+                }
+
+                var lineComment = line.IndexOf("//", position, StringComparison.Ordinal);
+                var blockComment = line.IndexOf("/*", position, StringComparison.Ordinal);
+
+                if (lineComment >= 0 && (blockComment < 0 || lineComment < blockComment))
+                    return line.IndexOf("todo", lineComment + 2, StringComparison.OrdinalIgnoreCase) >= 0;
+
+                if (blockComment < 0) return false;
+                inBlockComment = true;
+                position = blockComment + 2;
+            }
+
+            return false;
+        }
+
+        private static string FormatTodoText(string line)
+        {
+            var original = line.Trim();
+            var todoIndex = original.IndexOf("todo", StringComparison.OrdinalIgnoreCase);
+            if (todoIndex >= 0)
+            {
+                var lineComment = original.LastIndexOf("//", todoIndex, StringComparison.Ordinal);
+                var blockComment = original.LastIndexOf("/*", todoIndex, StringComparison.Ordinal);
+                var commentStart = Math.Max(lineComment, blockComment);
+                if (commentStart > 0)
+                    original = original.Substring(commentStart).Trim();
+            }
+
+            var prefixes = new[] { "//", "/*", "*", "/" };
+            foreach (var prefix in prefixes)
+            {
+                if (!original.StartsWith(prefix, StringComparison.Ordinal)) continue;
+                var remainder = original.Substring(prefix.Length).TrimStart();
+                if (!remainder.StartsWith("todo", StringComparison.OrdinalIgnoreCase)) return original;
+
+                remainder = remainder.Substring(4).TrimStart(' ', '\t', ':', '-');
+                if (remainder.EndsWith("*/", StringComparison.Ordinal))
+                    remainder = remainder.Substring(0, remainder.Length - 2).TrimEnd();
+                return string.IsNullOrEmpty(remainder) ? original : remainder;
+            }
+            return original;
+        }
+
+        private void SynchronizeDisplayedItems(IList<HgFileItem> desiredItems)
+        {
+            var selectedIdentity = SelectedItem?.Identity;
+            var selectedPath = SelectedItem?.Path;
+            var selectionCameFromOtherMode = SelectedItem != null &&
+                                             SelectedItem.IsTodoItem != IsTodoMode;
+            var oldViewItems = FilesView.Cast<HgFileItem>().ToList();
+            var oldViewIndex = SelectedItem == null ? -1 : oldViewItems.IndexOf(SelectedItem);
+
+            for (var index = 0; index < desiredItems.Count; index++)
+            {
+                var desired = desiredItems[index];
+                if (index < Files.Count && Files[index].Identity == desired.Identity)
+                {
+                    Files[index].UpdateFrom(desired);
+                    continue;
+                }
+
+                var existingIndex = -1;
+                for (var candidate = index + 1; candidate < Files.Count; candidate++)
+                {
+                    if (Files[candidate].Identity != desired.Identity) continue;
+                    existingIndex = candidate;
+                    break;
+                }
+
+                if (existingIndex >= 0)
+                {
+                    Files.Move(existingIndex, index);
+                    Files[index].UpdateFrom(desired);
+                }
+                else
+                {
+                    Files.Insert(index, desired);
+                }
+            }
+
+            while (Files.Count > desiredItems.Count)
+                Files.RemoveAt(Files.Count - 1);
+
+            var newViewItems = FilesView.Cast<HgFileItem>().ToList();
+            var selection = !string.IsNullOrEmpty(selectedIdentity)
+                ? newViewItems.FirstOrDefault(item => item.Identity == selectedIdentity)
+                : null;
+
+            if (selection == null && selectionCameFromOtherMode && !string.IsNullOrEmpty(selectedPath))
+                selection = newViewItems.FirstOrDefault(item =>
+                    string.Equals(item.Path, selectedPath, StringComparison.OrdinalIgnoreCase));
+
+            if (selection == null && oldViewIndex >= 0 && newViewItems.Count > 0)
+                selection = newViewItems[Math.Min(oldViewIndex, newViewItems.Count - 1)];
+
+            SelectedItem = selection;
+        }
+
+        private sealed class TodoFileState
+        {
+            public List<HgFileItem> Items { get; set; } = new List<HgFileItem>();
+            public DateTime LastWriteTimeUtc { get; set; }
+            public bool WasOpen { get; set; }
+        }
+
+        private sealed class TodoFileSnapshot
+        {
+            public HgFileItem Source { get; set; }
+            public string FullPath { get; set; }
+            public string Text { get; set; }
+            public bool IsOpen { get; set; }
+            public DateTime LastWriteTimeUtc { get; set; }
+            public List<HgFileItem> Items { get; set; }
+        }
+
         private async Task RefreshAsync()
         {
+            if (_isRefreshing) return;
+            _isRefreshing = true;
             IsBusy = true;
             try
             {
@@ -197,6 +600,7 @@ namespace FileCopyExtension.ViewModels
                 var customBranchName = CompareBranchName?.Trim() ?? "";
                 if (SelectedMode == HgDisplayMode.CustomBranch && string.IsNullOrEmpty(customBranchName))
                 {
+                    _sourceFiles.Clear();
                     Files.Clear();
                     SetSimpleStatus("Error: Branch name cannot be empty.");
                     return;
@@ -207,7 +611,15 @@ namespace FileCopyExtension.ViewModels
 
                 var dte = (DTE2)ServiceProvider.GlobalProvider.GetService(typeof(DTE));
                 var solutionDir = GetSolutionDir(dte);
-                if (solutionDir == null) return;
+                if (solutionDir == null)
+                {
+                    SetSimpleStatus("Waiting for solution...");
+                    _solutionRetryTimer.Start();
+                    return;
+                }
+
+                _solutionRetryTimer.Stop();
+                _solutionRetryAttempts = 0;
 
                 var repoRoot = FindRepoRoot(solutionDir);
                 if (string.IsNullOrEmpty(repoRoot))
@@ -215,6 +627,7 @@ namespace FileCopyExtension.ViewModels
                     SetSimpleStatus("No repo found");
                     return;
                 }
+                _repoRoot = repoRoot;
 
                 var isShowUntracked = ShowUntracked;
 
@@ -274,7 +687,13 @@ namespace FileCopyExtension.ViewModels
                                     status = "♦";
                                 }
 
-                                fileList.Add(new HgFileItem { Status = status, Path = path, IsUnchanged = isUnchanged });
+                                fileList.Add(new HgFileItem
+                                {
+                                    Status = status,
+                                    Path = path,
+                                    IsUnchanged = isUnchanged,
+                                    Identity = "file|" + path
+                                });
                             }
                         }
                     }
@@ -300,7 +719,12 @@ namespace FileCopyExtension.ViewModels
                     _currentBaseRevDescription = bParts.Length >= 2
                         ? bParts[1] + (bParts.Length >= 3 ? ": " + bParts[2] : "")
                         : result.TargetRev;
-                    foreach (var item in result.Files) Files.Add(item);
+                    _sourceFiles.Clear();
+                    _sourceFiles.AddRange(result.Files);
+                    if (IsTodoMode)
+                        await RefreshTodoItemsAsync(true);
+                    else
+                        ShowFileItems();
 
                     StatusRuns.Clear();
                     if (SelectedMode != HgDisplayMode.Uncommitted)
@@ -329,6 +753,7 @@ namespace FileCopyExtension.ViewModels
             }
             finally
             {
+                _isRefreshing = false;
                 IsBusy = false;
                 UndoCommand.NotifyCanExecuteChanged();
             }
@@ -337,9 +762,11 @@ namespace FileCopyExtension.ViewModels
         private async Task OpenAllAsync()
         {
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-            var filteredItems = FilesView;
-            var count = 0;
-            foreach (var _ in filteredItems) count++;
+            var filteredItems = FilesView.Cast<HgFileItem>()
+                .GroupBy(item => item.Path, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .ToList();
+            var count = filteredItems.Count;
 
             if (count > 10)
             {
@@ -352,7 +779,7 @@ namespace FileCopyExtension.ViewModels
             if (solutionDir == null) return;
             var repoRoot = FindRepoRoot(solutionDir);
 
-            foreach (HgFileItem item in filteredItems)
+            foreach (var item in filteredItems)
             {
                 var fullPath = Path.Combine(repoRoot, item.Path);
                 if (File.Exists(fullPath))
@@ -440,7 +867,8 @@ namespace FileCopyExtension.ViewModels
             }
         }
 
-        private bool CanUndo(System.Collections.IList items) => items != null && items.Count > 0 && !IsBusy;
+        private bool CanUndo(System.Collections.IList items) =>
+            !IsTodoMode && items != null && items.Count > 0 && !IsBusy;
 
         private async Task OpenFileAsync(HgFileItem item)
         {
@@ -453,7 +881,14 @@ namespace FileCopyExtension.ViewModels
             var fullPath = Path.Combine(repoRoot, item.Path);
             if (File.Exists(fullPath))
             {
-                try { dte.ItemOperations.OpenFile(fullPath); } catch { }
+                try
+                {
+                    var window = dte.ItemOperations.OpenFile(fullPath, EnvDTE.Constants.vsViewKindTextView);
+                    window?.Activate();
+                    if (item.LineNumber > 0 && window?.Document?.Selection is TextSelection selection)
+                        selection.GotoLine(item.LineNumber, false);
+                }
+                catch { }
             }
         }
 
