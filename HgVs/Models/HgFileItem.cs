@@ -4,10 +4,21 @@ public class HgFileItem : System.ComponentModel.INotifyPropertyChanged
 {
     private int _lineNumber;
     private int _fileGroupIndex;
+    private bool _isReviewed;
 
     public string Status { get; set; }
     public string Path { get; set; }
     public bool IsUnchanged { get; set; }
+    public bool IsReviewed
+    {
+        get => _isReviewed;
+        set
+        {
+            if (_isReviewed == value) return;
+            _isReviewed = value;
+            OnPropertyChanged();
+        }
+    }
     public string TodoText { get; set; }
     public string Identity { get; set; }
     public int FileGroupIndex
@@ -48,6 +59,7 @@ public class HgFileItem : System.ComponentModel.INotifyPropertyChanged
         Status = other.Status;
         Path = other.Path;
         IsUnchanged = other.IsUnchanged;
+        IsReviewed = other.IsReviewed;
         TodoText = other.TodoText;
         FileGroupIndex = other.FileGroupIndex;
         LineNumber = other.LineNumber;

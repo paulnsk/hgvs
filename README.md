@@ -7,10 +7,17 @@ HgVs is a Visual Studio 2022 and Visual Studio 2026 extension that adds practica
 - Browse modified, added, removed, and untracked files.
 - Compare uncommitted changes, the current branch, the parent branch, or a custom branch.
 - Open files normally or open their Mercurial diff.
+- Track viewed and not-viewed changed files persistently across branches and projects.
 - Navigate TODO comments in changed files, including unsaved editor contents.
 - Inspect Mercurial file history and open historical revisions.
 - Revert selected changes.
 - Export open editor files to a directory or Total Commander.
+
+## Modified-files controls
+
+- Press `Enter` to open the selected file, or `Ctrl+Enter` to open its diff when a base version exists.
+- Press `Space`, or click the Review cell, to toggle the viewed state.
+- Use the context menu to open a file or diff and to mark the current or all visible files as viewed or not viewed.
 
 ## Keyboard shortcut
 

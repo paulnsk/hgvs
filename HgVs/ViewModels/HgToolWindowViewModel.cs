@@ -25,12 +25,17 @@ namespace HgVs.ViewModels
     public class HgToolWindowViewModel : ObservableObject
     {
         private const string CollectionName = "HgVs_Filters";
+        private const string ReviewedFilesPropertyName = "ReviewedFilesV1";
+        private const int MaxReviewedFiles = 1000;
         private readonly DispatcherTimer _debounceTimer;
         private readonly DispatcherTimer _todoRefreshTimer;
         private readonly DispatcherTimer _solutionRetryTimer;
         private readonly List<HgFileItem> _sourceFiles = new List<HgFileItem>();
         private readonly Dictionary<string, TodoFileState> _todoFileStates =
             new Dictionary<string, TodoFileState>(StringComparer.OrdinalIgnoreCase);
+        private readonly LinkedList<string> _reviewedPaths = new LinkedList<string>();
+        private readonly Dictionary<string, LinkedListNode<string>> _reviewedPathNodes =
+            new Dictionary<string, LinkedListNode<string>>(StringComparer.OrdinalIgnoreCase);
         private WritableSettingsStore _settingsStore;
         private string _currentBaseRev = ".";
         private string _currentBaseRevDescription = "";
@@ -173,7 +178,9 @@ namespace HgVs.ViewModels
             OpenAllCommand = new RelayCommand(async _ => await OpenAllAsync());
             UndoCommand = new RelayCommand(async p => await UndoAsync((System.Collections.IList)p), p => CanUndo((System.Collections.IList)p));
             OpenFileCommand = new RelayCommand(async p => await OpenFileAsync((HgFileItem)p));
-            DiffFileCommand = new RelayCommand(async p => await DiffFileAsync((HgFileItem)p));
+            DiffFileCommand = new RelayCommand(
+                async p => await DiffFileAsync((HgFileItem)p),
+                p => CanDiffFile(p as HgFileItem));
 
             _debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
             _debounceTimer.Tick += DebounceTimer_Tick;
@@ -220,6 +227,8 @@ namespace HgVs.ViewModels
                 if (_settingsStore.PropertyExists(CollectionName, "Exclude")) ExcludeText = _settingsStore.GetString(CollectionName, "Exclude");
                 if (_settingsStore.PropertyExists(CollectionName, "CompareBranch")) CompareBranchName = _settingsStore.GetString(CollectionName, "CompareBranch");
                 if (_settingsStore.PropertyExists(CollectionName, "HideUnchanged")) _hideUnchanged = _settingsStore.GetBoolean(CollectionName, "HideUnchanged");
+                if (_settingsStore.PropertyExists(CollectionName, ReviewedFilesPropertyName))
+                    LoadReviewedPaths(_settingsStore.GetString(CollectionName, ReviewedFilesPropertyName));
             }
             catch { /* Ignore */ }
         }
@@ -237,6 +246,58 @@ namespace HgVs.ViewModels
                 _settingsStore.SetBoolean(CollectionName, "HideUnchanged", HideUnchanged);
             }
             catch { /* Ignore */ }
+        }
+
+        private void LoadReviewedPaths(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return;
+
+            foreach (var encodedPath in value.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                try
+                {
+                    var path = Encoding.UTF8.GetString(Convert.FromBase64String(encodedPath.Trim()));
+                    AddReviewedPath(path);
+                }
+                catch (FormatException)
+                {
+                    // Ignore malformed or obsolete entries without losing the remaining list.
+                }
+            }
+        }
+
+        private void SaveReviewedPaths()
+        {
+            try
+            {
+                if (_settingsStore == null) return;
+                if (!_settingsStore.CollectionExists(CollectionName)) _settingsStore.CreateCollection(CollectionName);
+
+                var encodedPaths = _reviewedPaths.Select(path =>
+                    Convert.ToBase64String(Encoding.UTF8.GetBytes(path)));
+                _settingsStore.SetString(
+                    CollectionName,
+                    ReviewedFilesPropertyName,
+                    string.Join("\n", encodedPaths));
+            }
+            catch
+            {
+                // Review markers are best-effort UI state.
+            }
+        }
+
+        private void AddReviewedPath(string path)
+        {
+            if (string.IsNullOrEmpty(path) || _reviewedPathNodes.ContainsKey(path)) return;
+
+            var node = _reviewedPaths.AddLast(path);
+            _reviewedPathNodes[path] = node;
+            while (_reviewedPaths.Count > MaxReviewedFiles)
+            {
+                var oldest = _reviewedPaths.First;
+                _reviewedPaths.RemoveFirst();
+                _reviewedPathNodes.Remove(oldest.Value);
+            }
         }
 
         private bool FileFilter(object item)
@@ -406,6 +467,7 @@ namespace HgVs.ViewModels
 
                     foreach (var item in state.Items)
                     {
+                        ApplyReviewState(item);
                         item.FileGroupIndex = groupIndex;
                         todoItems.Add(item);
                     }
@@ -480,6 +542,7 @@ namespace HgVs.ViewModels
                     Status = source.Status,
                     Path = source.Path,
                     IsUnchanged = source.IsUnchanged,
+                    IsReviewed = source.IsReviewed,
                     TodoText = FormatTodoText(line),
                     LineNumber = index + 1,
                     Identity = "todo|" + source.Path + "|" + identityText + "|" + occurrence
@@ -760,6 +823,8 @@ namespace HgVs.ViewModels
                         : result.TargetRev;
                     _sourceFiles.Clear();
                     _sourceFiles.AddRange(result.Files);
+                    foreach (var item in _sourceFiles)
+                        ApplyReviewState(item);
                     if (IsTodoMode)
                         await RefreshTodoItemsAsync(true);
                     else
@@ -854,6 +919,82 @@ namespace HgVs.ViewModels
                 .OrderBy(item => Math.Abs(item.LineNumber - caretLine))
                 .ThenBy(item => item.LineNumber)
                 .FirstOrDefault();
+        }
+
+        public void ToggleReviewed(HgFileItem item)
+        {
+            if (item == null) return;
+            SetReviewed(item.Path, !item.IsReviewed);
+        }
+
+        public void SetVisibleFilesReviewed(bool isReviewed)
+        {
+            var paths = FilesView.Cast<HgFileItem>()
+                .Select(item => item.Path)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            foreach (var path in paths)
+                SetReviewedPath(path, isReviewed);
+
+            RefreshReviewStates();
+            SaveReviewedPaths();
+        }
+
+        private void SetReviewed(string path, bool isReviewed)
+        {
+            if (!SetReviewedPath(path, isReviewed)) return;
+            RefreshReviewStates();
+            SaveReviewedPaths();
+        }
+
+        private bool SetReviewedPath(string path, bool isReviewed)
+        {
+            var reviewPath = GetReviewPath(path);
+            if (string.IsNullOrEmpty(reviewPath)) return false;
+
+            if (isReviewed)
+            {
+                if (_reviewedPathNodes.ContainsKey(reviewPath)) return false;
+                AddReviewedPath(reviewPath);
+                return true;
+            }
+
+            if (!_reviewedPathNodes.TryGetValue(reviewPath, out var node)) return false;
+            _reviewedPaths.Remove(node);
+            _reviewedPathNodes.Remove(reviewPath);
+            return true;
+        }
+
+        private void RefreshReviewStates()
+        {
+            foreach (var item in _sourceFiles)
+                ApplyReviewState(item);
+            foreach (var item in Files)
+                ApplyReviewState(item);
+            foreach (var state in _todoFileStates.Values)
+            foreach (var item in state.Items)
+                ApplyReviewState(item);
+        }
+
+        private void ApplyReviewState(HgFileItem item)
+        {
+            var reviewPath = GetReviewPath(item.Path);
+            item.IsReviewed = !string.IsNullOrEmpty(reviewPath) &&
+                              _reviewedPathNodes.ContainsKey(reviewPath);
+        }
+
+        private string GetReviewPath(string path)
+        {
+            if (string.IsNullOrEmpty(_repoRoot) || string.IsNullOrEmpty(path)) return null;
+            try
+            {
+                return Path.GetFullPath(Path.Combine(_repoRoot, path));
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private async Task OpenAllAsync()
@@ -989,15 +1130,17 @@ namespace HgVs.ViewModels
             }
         }
 
+        public bool CanDiffFile(HgFileItem item) =>
+            !IsBusy &&
+            item != null &&
+            !string.IsNullOrEmpty(_currentBaseRev) &&
+            _currentBaseRev != "null" &&
+            (item.Status == "M" || item.Status == "♦");
+
         private async Task DiffFileAsync(HgFileItem item)
         {
-            if (item == null) return;
+            if (!CanDiffFile(item)) return;
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-            if (string.IsNullOrEmpty(_currentBaseRev) || _currentBaseRev == "null")
-            {
-                MessageBox.Show("Cannot diff untracked file (no base version).");
-                return;
-            }
 
             var dte = (DTE2)ServiceProvider.GlobalProvider.GetService(typeof(DTE));
             var solutionDir = GetSolutionDir(dte);

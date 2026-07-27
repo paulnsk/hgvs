@@ -67,7 +67,9 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+
             <EventSetter Event="MouseDoubleClick" Handler="LvFiles_MouseDoubleClick"/>
+            <EventSetter Event="PreviewMouseRightButtonDown" Handler="LvFiles_PreviewMouseRightButtonDown"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarHoverKey}}"/>
@@ -98,6 +100,51 @@
                                 <Setter Property="Opacity" Value="0.5"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="MenuItem" x:Key="FileContextMenuItemStyle">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
+            <Setter Property="Padding" Value="6,3"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Border x:Name="ItemBorder" Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="22"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter Grid.Column="0" Content="{TemplateBinding Icon}"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <ContentPresenter Grid.Column="1" ContentSource="Header"
+                                                  RecognizesAccessKey="True" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background"
+                                        Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarHoverKey}}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="Separator" x:Key="FileContextMenuSeparatorStyle">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Separator">
+                        <Border Height="1" Margin="28,3,5,3"
+                                Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}"/>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -238,7 +285,35 @@
                   Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
                   Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"
                   BorderThickness="0" GridViewColumnHeader.Click="GridViewColumnHeader_Click"
-                  SelectionChanged="LvFiles_SelectionChanged">
+                  SelectionChanged="LvFiles_SelectionChanged"
+                  PreviewKeyDown="LvFiles_PreviewKeyDown">
+            <ListView.ContextMenu>
+                <ContextMenu Opened="FileContextMenu_Opened"
+                             Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
+                             Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}">
+                    <MenuItem Header="Open" Tag="Open" Style="{StaticResource FileContextMenuItemStyle}" Click="ContextOpen_Click"/>
+                    <MenuItem Header="Open Diff" Tag="OpenDiff" Style="{StaticResource FileContextMenuItemStyle}" Click="ContextOpenDiff_Click"/>
+                    <Separator Style="{StaticResource FileContextMenuSeparatorStyle}"/>
+                    <MenuItem Header="Mark as Viewed" Tag="ToggleViewed" Style="{StaticResource FileContextMenuItemStyle}" Click="ContextToggleViewed_Click"/>
+                    <Separator Style="{StaticResource FileContextMenuSeparatorStyle}"/>
+                    <MenuItem Header="Mark ALL as viewed" Tag="MarkAllViewed" Style="{StaticResource FileContextMenuItemStyle}" Click="ContextMarkAllViewed_Click">
+                        <MenuItem.Icon>
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Width="7" Height="7" Margin="0,0,1,0" Fill="Transparent" Stroke="#FFB9A66A" StrokeThickness="1.2"/>
+                                <Ellipse Width="7" Height="7" Fill="Transparent" Stroke="#FFB9A66A" StrokeThickness="1.2"/>
+                            </StackPanel>
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Header="Mark ALL as not viewed" Tag="MarkAllNotViewed" Style="{StaticResource FileContextMenuItemStyle}" Click="ContextMarkAllNotViewed_Click">
+                        <MenuItem.Icon>
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Width="7" Height="7" Margin="0,0,1,0" Fill="#FFB9A66A" Stroke="#FFB9A66A" StrokeThickness="1.2"/>
+                                <Ellipse Width="7" Height="7" Fill="#FFB9A66A" Stroke="#FFB9A66A" StrokeThickness="1.2"/>
+                            </StackPanel>
+                        </MenuItem.Icon>
+                    </MenuItem>
+                </ContextMenu>
+            </ListView.ContextMenu>
             <ListView.View>
                 <GridView>
                     <GridViewColumn x:Name="GroupColumn" Width="0">
@@ -249,6 +324,38 @@
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding Status}" Foreground="{Binding Status, Converter={StaticResource StatusColorConverter}}" FontWeight="Bold"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                    <GridViewColumn Width="24">
+                        <GridViewColumnHeader Content="Rv" Padding="0" ToolTip="Review"/>
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <Border Background="Transparent" Width="24" Height="18"
+                                        MouseLeftButtonDown="ReviewCell_MouseLeftButtonDown">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="ToolTip" Value="not viewed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsReviewed}" Value="True">
+                                                    <Setter Property="ToolTip" Value="viewed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <Ellipse Width="8" Height="8" Fill="#FFB9A66A" Stroke="#FFB9A66A"
+                                             StrokeThickness="1.2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <Ellipse.Style>
+                                            <Style TargetType="Ellipse">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsReviewed}" Value="True">
+                                                        <Setter Property="Visibility" Value="Hidden"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Ellipse.Style>
+                                    </Ellipse>
+                                </Border>
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
