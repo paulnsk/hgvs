@@ -17,7 +17,7 @@ HgVs is a Visual Studio 2022 and Visual Studio 2026 extension that adds practica
 
 - Press `Enter` to open the selected file, or `Ctrl+Enter` to open its diff when a base version exists.
 - Press `Space`, or click the Review cell, to toggle the viewed state.
-- Use the context menu to open a file or diff and to mark the current or all visible files as viewed or not viewed.
+- Use the context menu to open files or diffs and update review state, including from a pasted list of paths or masks.
 
 ## Keyboard shortcut
 

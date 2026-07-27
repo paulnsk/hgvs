@@ -314,6 +314,14 @@
                             </StackPanel>
                         </MenuItem.Icon>
                     </MenuItem>
+                    <Separator Style="{StaticResource FileContextMenuSeparatorStyle}"/>
+                    <MenuItem Header="Un-view multiple files..." Tag="MarkFromListNotViewed"
+                              Style="{StaticResource FileContextMenuItemStyle}"
+                              Click="ContextMarkFilesFromListNotViewed_Click">
+                        <MenuItem.Icon>
+                            <Ellipse Width="8" Height="8" Fill="#FFB9A66A" Stroke="#FFB9A66A" StrokeThickness="1.2"/>
+                        </MenuItem.Icon>
+                    </MenuItem>
                 </ContextMenu>
             </ListView.ContextMenu>
             <ListView.View>

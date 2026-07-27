@@ -5,9 +5,12 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
+using EnvDTE80;
 using HgVs.Models;
 using HgVs.ViewModels;
+using Microsoft.VisualStudio.Shell;
 
 namespace HgVs.Views
 {
@@ -238,6 +241,27 @@ namespace HgVs.Views
         {
             if (DataContext is HgToolWindowViewModel vm)
                 vm.SetVisibleFilesReviewed(false);
+        }
+
+        private void ContextMarkFilesFromListNotViewed_Click(object sender, RoutedEventArgs e)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            if (!(DataContext is HgToolWindowViewModel vm)) return;
+
+            var dialog = new MarkFilesNotViewedDialog();
+            try
+            {
+                var dteService = ServiceProvider.GlobalProvider.GetService(typeof(EnvDTE.DTE));
+                if (dteService is DTE2 dte && dte.MainWindow != null)
+                    new WindowInteropHelper(dialog).Owner = dte.MainWindow.HWnd;
+            }
+            catch
+            {
+                // ShowDialog is still modal to the WPF dispatcher if the VS owner cannot be resolved.
+            }
+
+            if (dialog.ShowDialog() == true)
+                vm.MarkMatchingFilesNotViewed(dialog.PatternsText);
         }
 
         // Логика сортировки GridView (остается в View, т.к. это чистый UI-механизм)

@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
@@ -925,6 +926,56 @@ namespace HgVs.ViewModels
         {
             if (item == null) return;
             SetReviewed(item.Path, !item.IsReviewed);
+        }
+
+        public int MarkMatchingFilesNotViewed(string input)
+        {
+            var patterns = Regex.Split(input ?? string.Empty, @"[\s,;|]+")
+                .Select(pattern => pattern.Trim('"', '\'', '(', ')', '[', ']', '{', '}', '<', '>', '!'))
+                .Where(pattern => pattern.Length > 0)
+                .Select(pattern => pattern.Replace('/', '\\'))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(pattern => new
+                {
+                    Text = pattern,
+                    Wildcard = pattern.IndexOf('*') >= 0 || pattern.IndexOf('?') >= 0
+                        ? new Regex(
+                            "^" + Regex.Escape(pattern).Replace("\\*", ".*").Replace("\\?", ".") + "$",
+                            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
+                        : null
+                })
+                .ToList();
+
+            if (patterns.Count == 0) return 0;
+
+            var matchingPaths = _sourceFiles
+                .Where(item =>
+                {
+                    var relativePath = (item.Path ?? string.Empty).Replace('/', '\\');
+                    var fullPath = GetReviewPath(item.Path) ?? string.Empty;
+                    var fileName = Path.GetFileName(relativePath) ?? string.Empty;
+                    var candidates = new[] { relativePath, fullPath, fileName };
+
+                    return patterns.Any(pattern => pattern.Wildcard != null
+                        ? candidates.Any(pattern.Wildcard.IsMatch)
+                        : candidates.Any(candidate =>
+                            candidate.IndexOf(pattern.Text, StringComparison.OrdinalIgnoreCase) >= 0));
+                })
+                .Select(item => item.Path)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var changed = false;
+            foreach (var path in matchingPaths)
+                changed |= SetReviewedPath(path, false);
+
+            if (changed)
+            {
+                RefreshReviewStates();
+                SaveReviewedPaths();
+            }
+
+            return matchingPaths.Count;
         }
 
         public void SetVisibleFilesReviewed(bool isReviewed)
