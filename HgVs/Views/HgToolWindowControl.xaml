@@ -106,7 +106,7 @@
         </Style>
 
         <Style TargetType="MenuItem" x:Key="FileContextMenuItemStyle">
-            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"/>
             <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
             <Setter Property="Padding" Value="6,3"/>
             <Setter Property="Template">
@@ -143,8 +143,10 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Separator">
-                        <Border Height="1" Margin="28,3,5,3"
-                                Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}"/>
+                        <Border Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}">
+                            <Border Height="1" Margin="28,3,5,3"
+                                    Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}"/>
+                        </Border>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -331,7 +333,7 @@
                         <GridViewColumnHeader Content="Rv" Padding="0" ToolTip="Review"/>
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
-                                <Border Background="Transparent" Width="24" Height="18"
+                                <Border Background="Transparent" HorizontalAlignment="Stretch" Height="18"
                                         MouseLeftButtonDown="ReviewCell_MouseLeftButtonDown">
                                     <Border.Style>
                                         <Style TargetType="Border">
