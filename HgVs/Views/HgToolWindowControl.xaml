@@ -374,8 +374,8 @@
                                     <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarHoverKey}}"/>
                                 </Trigger>
                                 <Trigger Property="IsSelected" Value="True">
-                                    <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.HighlightKey}}"/>
-                                    <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.HighlightTextKey}}"/>
+                                    <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarHoverKey}}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
                                 </Trigger>
                             </Style.Triggers>
                         </Style>
