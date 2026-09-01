@@ -29,6 +29,7 @@ namespace HgVs.ViewModels
         private const string ReviewedFilesPropertyName = "ReviewedFilesV1";
         private const int MaxReviewedFiles = 1000;
         private readonly DispatcherTimer _debounceTimer;
+        private readonly DispatcherTimer _compareRefreshTimer;
         private readonly DispatcherTimer _todoRefreshTimer;
         private readonly DispatcherTimer _solutionRetryTimer;
         private readonly List<HgFileItem> _sourceFiles = new List<HgFileItem>();
@@ -43,6 +44,7 @@ namespace HgVs.ViewModels
         private string _repoRoot;
         private bool _isTodoRefreshRunning;
         private bool _isRefreshing;
+        private bool _isUpdatingMergeBaseCandidates;
         private int _solutionRetryAttempts;
 
         // --- Команды ---
@@ -166,7 +168,34 @@ namespace HgVs.ViewModels
         public string CompareBranchName
         {
             get => _compareBranchName;
-            set { if (SetProperty(ref _compareBranchName, value)) TriggerDebounce(); }
+            set
+            {
+                if (_isUpdatingMergeBaseCandidates && string.IsNullOrEmpty(value)) return;
+                if (!SetProperty(ref _compareBranchName, value)) return;
+
+                OnPropertyChanged(nameof(HasCompareBranchName));
+                TriggerCompareRefresh();
+            }
+        }
+
+        public bool HasCompareBranchName => !string.IsNullOrWhiteSpace(CompareBranchName);
+
+        private HgMergeBaseCandidate _selectedMergeBaseCandidate;
+        public HgMergeBaseCandidate SelectedMergeBaseCandidate
+        {
+            get => _selectedMergeBaseCandidate;
+            set
+            {
+                if (!SetProperty(ref _selectedMergeBaseCandidate, value) || value == null || _isUpdatingMergeBaseCandidates)
+                    return;
+
+                _compareRefreshTimer.Stop();
+                _compareBranchName = value.Revision;
+                OnPropertyChanged(nameof(CompareBranchName));
+                OnPropertyChanged(nameof(HasCompareBranchName));
+                SaveSettings();
+                ActivateCustomComparison();
+            }
         }
 
         public ObservableCollection<HgFileItem> Files { get; } = new ObservableCollection<HgFileItem>();
@@ -186,6 +215,9 @@ namespace HgVs.ViewModels
 
             _debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
             _debounceTimer.Tick += DebounceTimer_Tick;
+
+            _compareRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+            _compareRefreshTimer.Tick += CompareRefreshTimer_Tick;
 
             _todoRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
             _todoRefreshTimer.Tick += TodoRefreshTimer_Tick;
@@ -215,6 +247,35 @@ namespace HgVs.ViewModels
             FilesView.Refresh(); // Фильтруем на лету
         }
 
+        private void TriggerCompareRefresh()
+        {
+            _compareRefreshTimer.Stop();
+            _compareRefreshTimer.Start();
+        }
+
+        private void CompareRefreshTimer_Tick(object sender, EventArgs e)
+        {
+            _compareRefreshTimer.Stop();
+            SaveSettings();
+
+            if (!HasCompareBranchName)
+            {
+                if (SelectedMode == HgDisplayMode.CustomBranch)
+                    SelectedMode = HgDisplayMode.Uncommitted;
+                return;
+            }
+
+            ActivateCustomComparison();
+        }
+
+        private void ActivateCustomComparison()
+        {
+            if (SelectedMode != HgDisplayMode.CustomBranch)
+                SelectedMode = HgDisplayMode.CustomBranch;
+            else
+                RefreshCommand.Execute(null);
+        }
+
         private void LoadSettings()
         {
             try
@@ -227,7 +288,7 @@ namespace HgVs.ViewModels
 
                 if (_settingsStore.PropertyExists(CollectionName, "Filter")) FilterText = _settingsStore.GetString(CollectionName, "Filter");
                 if (_settingsStore.PropertyExists(CollectionName, "Exclude")) ExcludeText = _settingsStore.GetString(CollectionName, "Exclude");
-                if (_settingsStore.PropertyExists(CollectionName, "CompareBranch")) CompareBranchName = _settingsStore.GetString(CollectionName, "CompareBranch");
+                if (_settingsStore.PropertyExists(CollectionName, "CompareBranch")) _compareBranchName = _settingsStore.GetString(CollectionName, "CompareBranch");
                 if (_settingsStore.PropertyExists(CollectionName, "HideUnchanged")) _hideUnchanged = _settingsStore.GetBoolean(CollectionName, "HideUnchanged");
                 if (_settingsStore.PropertyExists(CollectionName, ReviewedFilesPropertyName))
                     LoadReviewedPaths(_settingsStore.GetString(CollectionName, ReviewedFilesPropertyName));
@@ -814,9 +875,7 @@ namespace HgVs.ViewModels
                     return new { Files = fileList, MergeBases = mergeBases, CurrentInfo = currentInfoStr, BaseInfo = baseInfoStr, Error = errorMsg, TargetRev = targetRev };
                 });
 
-                MergeBaseCandidates.Clear();
-                foreach (var candidate in result.MergeBases)
-                    MergeBaseCandidates.Add(candidate);
+                UpdateMergeBaseCandidates(result.MergeBases);
 
                 if (result.Error != null)
                 {
@@ -868,6 +927,27 @@ namespace HgVs.ViewModels
                 _isRefreshing = false;
                 IsBusy = false;
                 UndoCommand.NotifyCanExecuteChanged();
+            }
+        }
+
+        private void UpdateMergeBaseCandidates(IList<HgMergeBaseCandidate> candidates)
+        {
+            var selectedRevision = CompareBranchName;
+            _isUpdatingMergeBaseCandidates = true;
+            try
+            {
+                MergeBaseCandidates.Clear();
+                foreach (var candidate in candidates)
+                    MergeBaseCandidates.Add(candidate);
+
+                _selectedMergeBaseCandidate = candidates.FirstOrDefault(candidate =>
+                    string.Equals(candidate.Revision, selectedRevision, StringComparison.OrdinalIgnoreCase));
+                OnPropertyChanged(nameof(SelectedMergeBaseCandidate));
+                OnPropertyChanged(nameof(CompareBranchName));
+            }
+            finally
+            {
+                _isUpdatingMergeBaseCandidates = false;
             }
         }
 
@@ -1288,7 +1368,7 @@ namespace HgVs.ViewModels
                 .Distinct()
                 .ToList();
             var parentRevset = string.Join(" or ", parentRevisions);
-            const string parentTemplate = "{rev}\\t{branch}\\t{node|short}\\t{date|shortdate}\\t{desc|firstline}\\n";
+            const string parentTemplate = "{rev}\\t{branch}\\t{node|short}\\t{date|isodatesec}\\t{desc|firstline}\\n";
             if (!RunHgCommand(
                     repoRoot,
                     "log -r \"" + parentRevset + "\" --template \"" + parentTemplate + "\"",
@@ -1306,7 +1386,7 @@ namespace HgVs.ViewModels
                     Revision = revision,
                     Branch = parts[1],
                     Node = parts[2],
-                    Date = parts[3],
+                    Date = parts[3].Length >= 19 ? parts[3].Substring(0, 19) : parts[3],
                     Description = parts[4]
                 };
             }

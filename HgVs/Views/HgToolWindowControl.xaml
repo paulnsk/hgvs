@@ -162,6 +162,153 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
+
+        <Style TargetType="RadioButton" x:Key="RadioOptionStyle" BasedOn="{StaticResource OptionStyle}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Grid Background="Transparent" SnapsToDevicePixels="True">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="16"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Ellipse x:Name="RadioBorder" Width="13" Height="13"
+                                     Fill="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
+                                     Stroke="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}"
+                                     StrokeThickness="1"/>
+                            <Ellipse x:Name="RadioDot" Width="6" Height="6" Fill="CornflowerBlue"
+                                     Visibility="Collapsed"/>
+                            <ContentPresenter Grid.Column="1" Margin="4,0,0,0" VerticalAlignment="Center"
+                                              RecognizesAccessKey="True"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="RadioBorder" Property="Stroke" Value="CornflowerBlue"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="RadioBorder" Property="Stroke" Value="CornflowerBlue"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="RadioBorder" Property="Stroke" Value="CornflowerBlue"/>
+                                <Setter TargetName="RadioDot" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="CheckBox" x:Key="CheckOptionStyle" BasedOn="{StaticResource OptionStyle}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid Background="Transparent" SnapsToDevicePixels="True">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="16"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Border x:Name="CheckBorder" Width="13" Height="13"
+                                    Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
+                                    BorderBrush="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}"
+                                    BorderThickness="1">
+                                <Path x:Name="CheckGlyph" Data="M 2,6 L 5,9 L 11,2" Stroke="CornflowerBlue"
+                                      StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                      Visibility="Collapsed"/>
+                            </Border>
+                            <ContentPresenter Grid.Column="1" Margin="4,0,0,0" VerticalAlignment="Center"
+                                              RecognizesAccessKey="True"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="CheckBorder" Property="BorderBrush" Value="CornflowerBlue"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="CheckBorder" Property="BorderBrush" Value="CornflowerBlue"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="CheckBorder" Property="BorderBrush" Value="CornflowerBlue"/>
+                                <Setter TargetName="CheckGlyph" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ComboBox" x:Key="ThemedRevisionComboBoxStyle">
+            <Setter Property="Foreground" Value="Gray"/>
+            <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid SnapsToDevicePixels="True">
+                            <Border x:Name="ComboBorder" Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="21"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="PART_EditableTextBox" Margin="2,0,0,0" Padding="2,0"
+                                             VerticalContentAlignment="Center" Background="Transparent"
+                                             BorderThickness="0" Foreground="{TemplateBinding Foreground}"
+                                             FontWeight="{TemplateBinding FontWeight}" IsReadOnly="{TemplateBinding IsReadOnly}"/>
+                                    <ToggleButton Grid.Column="1" Focusable="False" ClickMode="Press"
+                                                  IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                                  Background="Transparent" BorderThickness="0">
+                                        <ToggleButton.Template>
+                                            <ControlTemplate TargetType="ToggleButton">
+                                                <Border x:Name="ArrowBackground" Background="Transparent">
+                                                    <Path Width="8" Height="4" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                          Data="M 0,0 L 4,4 L 8,0 Z"
+                                                          Fill="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="ArrowBackground" Property="Background"
+                                                                Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarHoverKey}}"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </ToggleButton.Template>
+                                    </ToggleButton>
+                                </Grid>
+                            </Border>
+                            <Popup x:Name="PART_Popup" Placement="Bottom" AllowsTransparency="True"
+                                   Focusable="False" IsOpen="{TemplateBinding IsDropDownOpen}" PopupAnimation="Fade">
+                                <Border Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
+                                        BorderBrush="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}"
+                                        BorderThickness="1">
+                                    <ScrollViewer MaxHeight="330" CanContentScroll="True">
+                                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="ComboBorder" Property="BorderBrush" Value="CornflowerBlue"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding SelectedMode}" Value="{x:Static models:HgDisplayMode.CustomBranch}">
+                    <Setter Property="Foreground" Value="#FF87CEFA"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </UserControl.Resources>
 
     <Grid>
@@ -179,9 +326,9 @@
             <Border DockPanel.Dock="Right" BorderBrush="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}"
                     BorderThickness="1" CornerRadius="3" Padding="7,3" Margin="8,0,0,0">
                 <StackPanel Orientation="Horizontal">
-                    <RadioButton Content="Files" GroupName="ListMode" Style="{StaticResource OptionStyle}" Margin="0,0,9,0"
+                    <RadioButton Content="Files" GroupName="ListMode" Style="{StaticResource RadioOptionStyle}" Margin="0,0,9,0"
                          IsChecked="{Binding SelectedListMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter={x:Static models:HgListMode.Files}}"/>
-                    <RadioButton Content="TODO" GroupName="ListMode" Style="{StaticResource OptionStyle}" Margin="0"
+                    <RadioButton Content="TODO" GroupName="ListMode" Style="{StaticResource RadioOptionStyle}" Margin="0"
                          IsChecked="{Binding SelectedListMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter={x:Static models:HgListMode.Todo}}"/>
                 </StackPanel>
             </Border>
@@ -195,34 +342,27 @@
 
         <!-- 2. Options -->
         <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="5,0,5,5" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}">
-            <RadioButton Content="Uncommitted Only" GroupName="Mode" Style="{StaticResource OptionStyle}"
+            <RadioButton Content="Uncommitted Only" GroupName="Mode" Style="{StaticResource RadioOptionStyle}"
                  IsChecked="{Binding SelectedMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter={x:Static models:HgDisplayMode.Uncommitted}}"/>
-            <RadioButton Content="Entire Branch (vs Parent)" GroupName="Mode" Style="{StaticResource OptionStyle}"
+            <RadioButton Content="Entire Branch (vs Parent)" GroupName="Mode" Style="{StaticResource RadioOptionStyle}"
                  IsChecked="{Binding SelectedMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter={x:Static models:HgDisplayMode.Branch}}"/>
-            <RadioButton Content="Vs Parent Branch HEAD" GroupName="Mode" Style="{StaticResource OptionStyle}"
+            <RadioButton Content="Vs Parent Branch HEAD" GroupName="Mode" Style="{StaticResource RadioOptionStyle}"
                  IsChecked="{Binding SelectedMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter={x:Static models:HgDisplayMode.BaseBranchHead}}"/>
 
             <StackPanel Orientation="Horizontal" Margin="0,0,10,0" VerticalAlignment="Center">
-                <RadioButton Content="vs " GroupName="Mode" Style="{StaticResource OptionStyle}" Margin="0"
+                <RadioButton Content="vs " GroupName="Mode" Style="{StaticResource RadioOptionStyle}" Margin="0"
+                     IsEnabled="{Binding HasCompareBranchName}"
                      IsChecked="{Binding SelectedMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter={x:Static models:HgDisplayMode.CustomBranch}}"/>
                 <ComboBox Width="135" IsEditable="True" IsTextSearchEnabled="True"
-                          TextSearch.TextPath="Revision"
-                          Text="{Binding CompareBranchName, UpdateSourceTrigger=PropertyChanged}"
-                          ItemsSource="{Binding MergeBaseCandidates}"
+                           Style="{StaticResource ThemedRevisionComboBoxStyle}"
+                           TextSearch.TextPath="Revision"
+                           Text="{Binding CompareBranchName, UpdateSourceTrigger=PropertyChanged}"
+                           SelectedItem="{Binding SelectedMergeBaseCandidate, Mode=TwoWay}"
+                           ItemsSource="{Binding MergeBaseCandidates}"
                           Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
                           BorderBrush="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}"
                           FontWeight="Bold" VerticalAlignment="Center" Padding="2,0"
                           ToolTip="Base revision for comparison. Choose a merged parent below, or type a branch, revision number, or hash. The latest merged default usually isolates this branch's own changes.">
-                    <ComboBox.Style>
-                        <Style TargetType="ComboBox">
-                            <Setter Property="Foreground" Value="Gray"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding SelectedMode}" Value="{x:Static models:HgDisplayMode.CustomBranch}">
-                                    <Setter Property="Foreground" Value="#FF87CEFA"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </ComboBox.Style>
                     <ComboBox.ItemContainerStyle>
                         <Style TargetType="ComboBoxItem">
                             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
@@ -242,7 +382,7 @@
                     </ComboBox.ItemContainerStyle>
                     <ComboBox.ItemTemplate>
                         <DataTemplate>
-                            <Border Width="640" Padding="8,5" Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBoxItem}}"
+                            <Border MinWidth="760" MaxWidth="1000" Padding="8,5" Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBoxItem}}"
                                     BorderBrush="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}" BorderThickness="0,0,0,1">
                                 <Grid>
                                     <Grid.RowDefinitions>
@@ -250,16 +390,16 @@
                                         <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="155"/>
+                                        <ColumnDefinition Width="130"/>
                                         <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="82"/>
+                                        <ColumnDefinition Width="138"/>
                                         <ColumnDefinition Width="104"/>
                                     </Grid.ColumnDefinitions>
 
                                     <TextBlock Text="{Binding Branch}" FontWeight="Bold" Foreground="CornflowerBlue"
                                                TextTrimming="CharacterEllipsis" ToolTip="{Binding Branch}"/>
                                     <TextBlock Grid.Column="1" Text="{Binding Description}" Margin="8,0"
-                                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Description}"/>
+                                               TextTrimming="WordEllipsis" ToolTip="{Binding Description}"/>
                                     <TextBlock Grid.Column="2" Text="{Binding RevisionLabel}" HorizontalAlignment="Right"
                                                FontWeight="SemiBold"/>
                                     <TextBlock Grid.Column="3" Text="{Binding Revision}" Margin="8,0,0,0"
@@ -289,8 +429,8 @@
                 </ComboBox>
             </StackPanel>
 
-            <CheckBox Content="Show Untracked (?)" IsChecked="{Binding ShowUntracked}" Style="{StaticResource OptionStyle}" Margin="10,0,0,0"/>
-            <CheckBox Content="Hide Unchanged" IsChecked="{Binding HideUnchanged}" Style="{StaticResource OptionStyle}"
+            <CheckBox Content="Show Untracked (?)" IsChecked="{Binding ShowUntracked}" Style="{StaticResource CheckOptionStyle}" Margin="10,0,0,0"/>
+            <CheckBox Content="Hide Unchanged" IsChecked="{Binding HideUnchanged}" Style="{StaticResource CheckOptionStyle}"
                       Margin="10,0,0,0" Visibility="{Binding HasUnchangedFiles, Converter={StaticResource BoolToVis}}"/>
         </WrapPanel>
 
