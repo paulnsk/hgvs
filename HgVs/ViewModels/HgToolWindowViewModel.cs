@@ -170,6 +170,7 @@ namespace HgVs.ViewModels
         }
 
         public ObservableCollection<HgFileItem> Files { get; } = new ObservableCollection<HgFileItem>();
+        public ObservableCollection<HgMergeBaseCandidate> MergeBaseCandidates { get; } = new ObservableCollection<HgMergeBaseCandidate>();
         public ICollectionView FilesView { get; }
 
         public HgToolWindowViewModel()
@@ -737,6 +738,7 @@ namespace HgVs.ViewModels
                 var result = await Task.Run(() =>
                 {
                     var fileList = new System.Collections.Generic.List<HgFileItem>();
+                    var mergeBases = new List<HgMergeBaseCandidate>();
                     string errorMsg = null;
                     string targetRev = ".";
                     switch (SelectedMode)
@@ -746,10 +748,10 @@ namespace HgVs.ViewModels
                             {
                                 targetRev = bName.Trim();
                                 if (string.IsNullOrEmpty(targetRev))
-                                    return new { Files = fileList, CurrentInfo = "", BaseInfo = "", Error = "Could not determine base branch name.", TargetRev = "." };
+                                    return new { Files = fileList, MergeBases = mergeBases, CurrentInfo = "", BaseInfo = "", Error = "Could not determine base branch name.", TargetRev = "." };
                             }
                             else
-                                return new { Files = fileList, CurrentInfo = "", BaseInfo = "", Error = "Root branch or error: " + hgError.Trim(), TargetRev = "." };
+                                return new { Files = fileList, MergeBases = mergeBases, CurrentInfo = "", BaseInfo = "", Error = "Root branch or error: " + hgError.Trim(), TargetRev = "." };
                             break;
                         case HgDisplayMode.CustomBranch:
                             targetRev = customBranchName;
@@ -763,6 +765,7 @@ namespace HgVs.ViewModels
                     var template = "{branch}|{node|short}|{desc|firstline}";
                     RunHgCommand(repoRoot, "log -r . --template \"" + template + "\"", out var currentInfoStr, out _);
                     if (string.IsNullOrEmpty(currentInfoStr)) currentInfoStr = "Unknown|?|?";
+                    mergeBases = GetMergeBaseCandidates(repoRoot, currentInfoStr.Split('|')[0]);
 
                     RunHgCommand(repoRoot, "log -r \"" + targetRev + "\" --template \"" + template + "\"", out var baseInfoStr, out _);
                     if (string.IsNullOrEmpty(baseInfoStr)) baseInfoStr = "Unknown|?|?";
@@ -808,8 +811,12 @@ namespace HgVs.ViewModels
                             errorMsg = "HG Error: " + statusError.Trim();
                     }
 
-                    return new { Files = fileList, CurrentInfo = currentInfoStr, BaseInfo = baseInfoStr, Error = errorMsg, TargetRev = targetRev };
+                    return new { Files = fileList, MergeBases = mergeBases, CurrentInfo = currentInfoStr, BaseInfo = baseInfoStr, Error = errorMsg, TargetRev = targetRev };
                 });
+
+                MergeBaseCandidates.Clear();
+                foreach (var candidate in result.MergeBases)
+                    MergeBaseCandidates.Add(candidate);
 
                 if (result.Error != null)
                 {
@@ -1246,6 +1253,104 @@ namespace HgVs.ViewModels
             StatusTooltip = sb.ToString();
         }
 
+        private List<HgMergeBaseCandidate> GetMergeBaseCandidates(string repoRoot, string currentBranch)
+        {
+            const string mergeTemplate = "{rev}\\t{p1rev}\\t{p2rev}\\n";
+            if (!RunHgCommand(
+                    repoRoot,
+                    "log -r \"sort(ancestors(.) and branch(.) and merge(), -rev)\" -l 30 --template \"" + mergeTemplate + "\"",
+                    out var mergeOutput,
+                    out _))
+                return new List<HgMergeBaseCandidate>();
+
+            var merges = new List<MergeRevision>();
+            foreach (var line in mergeOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var parts = line.Split('\t');
+                if (parts.Length != 3 ||
+                    !int.TryParse(parts[0], out var mergeRevision) ||
+                    !int.TryParse(parts[1], out var firstParentRevision) ||
+                    !int.TryParse(parts[2], out var secondParentRevision))
+                    continue;
+
+                merges.Add(new MergeRevision
+                {
+                    Revision = mergeRevision,
+                    FirstParentRevision = firstParentRevision,
+                    SecondParentRevision = secondParentRevision
+                });
+            }
+
+            if (merges.Count == 0) return new List<HgMergeBaseCandidate>();
+
+            var parentRevisions = merges
+                .SelectMany(merge => new[] { merge.FirstParentRevision, merge.SecondParentRevision })
+                .Distinct()
+                .ToList();
+            var parentRevset = string.Join(" or ", parentRevisions);
+            const string parentTemplate = "{rev}\\t{branch}\\t{node|short}\\t{date|shortdate}\\t{desc|firstline}\\n";
+            if (!RunHgCommand(
+                    repoRoot,
+                    "log -r \"" + parentRevset + "\" --template \"" + parentTemplate + "\"",
+                    out var parentOutput,
+                    out _))
+                return new List<HgMergeBaseCandidate>();
+
+            var parents = new Dictionary<int, MergeParent>();
+            foreach (var line in parentOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var parts = line.Split(new[] { '\t' }, 5);
+                if (parts.Length != 5 || !int.TryParse(parts[0], out var revision)) continue;
+                parents[revision] = new MergeParent
+                {
+                    Revision = revision,
+                    Branch = parts[1],
+                    Node = parts[2],
+                    Date = parts[3],
+                    Description = parts[4]
+                };
+            }
+
+            var seenNodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var candidates = new List<HgMergeBaseCandidate>();
+            foreach (var merge in merges)
+            {
+                if (!parents.TryGetValue(merge.FirstParentRevision, out var firstParent) ||
+                    !parents.TryGetValue(merge.SecondParentRevision, out var secondParent))
+                    continue;
+
+                MergeParent mergedParent;
+                if (string.Equals(firstParent.Branch, currentBranch, StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(secondParent.Branch, currentBranch, StringComparison.OrdinalIgnoreCase))
+                    mergedParent = secondParent;
+                else if (string.Equals(secondParent.Branch, currentBranch, StringComparison.OrdinalIgnoreCase) &&
+                         !string.Equals(firstParent.Branch, currentBranch, StringComparison.OrdinalIgnoreCase))
+                    mergedParent = firstParent;
+                else
+                    mergedParent = secondParent;
+
+                if (!seenNodes.Add(mergedParent.Node)) continue;
+                candidates.Add(new HgMergeBaseCandidate
+                {
+                    Revision = mergedParent.Node,
+                    Branch = mergedParent.Branch,
+                    Description = mergedParent.Description,
+                    Date = mergedParent.Date,
+                    RevisionNumber = mergedParent.Revision,
+                    MergeRevisionNumber = merge.Revision
+                });
+            }
+
+            candidates = candidates
+                .OrderByDescending(candidate => string.Equals(candidate.Branch, "default", StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(candidate => candidate.MergeRevisionNumber)
+                .ToList();
+            var latestDefault = candidates.FirstOrDefault(candidate =>
+                string.Equals(candidate.Branch, "default", StringComparison.OrdinalIgnoreCase));
+            if (latestDefault != null) latestDefault.IsLatestDefault = true;
+            return candidates;
+        }
+
         private bool RunHgCommand(string workDir, string args, out string output, out string error, string outputFile = null)
         {
             output = ""; error = "";
@@ -1294,6 +1399,22 @@ namespace HgVs.ViewModels
                 }
             }
             catch (Exception ex) { error = ex.Message; return false; }
+        }
+
+        private sealed class MergeRevision
+        {
+            public int Revision { get; set; }
+            public int FirstParentRevision { get; set; }
+            public int SecondParentRevision { get; set; }
+        }
+
+        private sealed class MergeParent
+        {
+            public int Revision { get; set; }
+            public string Branch { get; set; }
+            public string Node { get; set; }
+            public string Date { get; set; }
+            public string Description { get; set; }
         }
 
         private string GetSolutionDir(DTE2 dte)

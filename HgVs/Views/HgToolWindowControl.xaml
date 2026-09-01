@@ -205,12 +205,16 @@
             <StackPanel Orientation="Horizontal" Margin="0,0,10,0" VerticalAlignment="Center">
                 <RadioButton Content="vs " GroupName="Mode" Style="{StaticResource OptionStyle}" Margin="0"
                      IsChecked="{Binding SelectedMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter={x:Static models:HgDisplayMode.CustomBranch}}"/>
-                <TextBox Width="100" Text="{Binding CompareBranchName, UpdateSourceTrigger=PropertyChanged}" 
-                 Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
-                 BorderBrush="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}"
-                 FontWeight="Bold" VerticalAlignment="Center" Padding="2,0">
-                    <TextBox.Style>
-                        <Style TargetType="TextBox">
+                <ComboBox Width="135" IsEditable="True" IsTextSearchEnabled="True"
+                          TextSearch.TextPath="Revision"
+                          Text="{Binding CompareBranchName, UpdateSourceTrigger=PropertyChanged}"
+                          ItemsSource="{Binding MergeBaseCandidates}"
+                          Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
+                          BorderBrush="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}"
+                          FontWeight="Bold" VerticalAlignment="Center" Padding="2,0"
+                          ToolTip="Base revision for comparison. Choose a merged parent below, or type a branch, revision number, or hash. The latest merged default usually isolates this branch's own changes.">
+                    <ComboBox.Style>
+                        <Style TargetType="ComboBox">
                             <Setter Property="Foreground" Value="Gray"/>
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding SelectedMode}" Value="{x:Static models:HgDisplayMode.CustomBranch}">
@@ -218,8 +222,71 @@
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
-                    </TextBox.Style>
-                </TextBox>
+                    </ComboBox.Style>
+                    <ComboBox.ItemContainerStyle>
+                        <Style TargetType="ComboBoxItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsHighlighted" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarHoverKey}}"/>
+                                </Trigger>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.HighlightKey}}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.HighlightTextKey}}"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ComboBox.ItemContainerStyle>
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <Border Width="640" Padding="8,5" Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBoxItem}}"
+                                    BorderBrush="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}" BorderThickness="0,0,0,1">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="155"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="82"/>
+                                        <ColumnDefinition Width="104"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Text="{Binding Branch}" FontWeight="Bold" Foreground="CornflowerBlue"
+                                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Branch}"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Description}" Margin="8,0"
+                                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Description}"/>
+                                    <TextBlock Grid.Column="2" Text="{Binding RevisionLabel}" HorizontalAlignment="Right"
+                                               FontWeight="SemiBold"/>
+                                    <TextBlock Grid.Column="3" Text="{Binding Revision}" Margin="8,0,0,0"
+                                               FontFamily="Consolas" Foreground="CornflowerBlue"/>
+
+                                    <TextBlock Grid.Row="1" Text="{Binding MergeLabel}" FontSize="10" Foreground="Gray"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding Date}" HorizontalAlignment="Right"
+                                               FontSize="10" Foreground="Gray"/>
+                                    <Border Grid.Row="1" Grid.Column="1" Margin="8,2,0,0" Padding="4,0"
+                                            HorizontalAlignment="Left" CornerRadius="2" Background="#406E5A20">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsLatestDefault}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <TextBlock Text="LATEST MERGED DEFAULT" FontSize="9" FontWeight="Bold" Foreground="Goldenrod"/>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
             </StackPanel>
 
             <CheckBox Content="Show Untracked (?)" IsChecked="{Binding ShowUntracked}" Style="{StaticResource OptionStyle}" Margin="10,0,0,0"/>
