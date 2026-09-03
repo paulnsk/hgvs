@@ -8,6 +8,7 @@ public class HgFileItem : System.ComponentModel.INotifyPropertyChanged
 
     public string Status { get; set; }
     public string Path { get; set; }
+    public string OriginalPath { get; set; }
     public bool IsUnchanged { get; set; }
     public bool IsReviewed
     {
@@ -58,6 +59,7 @@ public class HgFileItem : System.ComponentModel.INotifyPropertyChanged
         if (other == null) throw new System.ArgumentNullException(nameof(other));
         Status = other.Status;
         Path = other.Path;
+        OriginalPath = other.OriginalPath;
         IsUnchanged = other.IsUnchanged;
         IsReviewed = other.IsReviewed;
         TodoText = other.TodoText;

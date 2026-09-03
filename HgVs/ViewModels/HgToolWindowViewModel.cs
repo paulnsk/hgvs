@@ -604,6 +604,7 @@ namespace HgVs.ViewModels
                 {
                     Status = source.Status,
                     Path = source.Path,
+                    OriginalPath = source.OriginalPath,
                     IsUnchanged = source.IsUnchanged,
                     IsReviewed = source.IsReviewed,
                     TodoText = FormatTodoText(line),
@@ -831,38 +832,63 @@ namespace HgVs.ViewModels
                     RunHgCommand(repoRoot, "log -r \"" + targetRev + "\" --template \"" + template + "\"", out var baseInfoStr, out _);
                     if (string.IsNullOrEmpty(baseInfoStr)) baseInfoStr = "Unknown|?|?";
 
-                    var flags = "-ma";
+                    var flags = "-marC";
                     if (isShowUntracked) flags += "u";
                     // Получаем реально измененные файлы 
                     var actuallyModified = GetActuallyModifiedFiles(repoRoot, targetRev);
 
                     if (RunHgCommand(repoRoot, "status --rev \"" + targetRev + "\" " + flags, out var output, out var statusError))
                     {
+                        var statusItems = new List<HgFileItem>();
+                        var removedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        HgFileItem lastAddedItem = null;
                         var lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
                         foreach (var line in lines)
                         {
-                            if (line.Length > 2)
+                            if (line.StartsWith("  ", StringComparison.Ordinal))
                             {
-                                var status = line.Substring(0, 1);
-                                var path = line.Substring(2).Trim();
-
-                                var normalizedPath = path.Replace('/', '\\');
-                                var isUnchanged = status == "M" && !actuallyModified.Contains(normalizedPath);
-
-                                if (isUnchanged)
-                                {
-                                    status = "♦";
-                                }
-
-                                fileList.Add(new HgFileItem
-                                {
-                                    Status = status,
-                                    Path = path,
-                                    IsUnchanged = isUnchanged,
-                                    Identity = "file|" + path
-                                });
+                                if (lastAddedItem != null)
+                                    lastAddedItem.OriginalPath = line.Substring(2).Trim();
+                                continue;
                             }
+
+                            lastAddedItem = null;
+                            if (line.Length <= 2) continue;
+
+                            var status = line.Substring(0, 1);
+                            var path = line.Substring(2).Trim();
+                            var normalizedPath = path.Replace('/', '\\');
+                            if (status == "R")
+                            {
+                                removedPaths.Add(normalizedPath);
+                                continue;
+                            }
+
+                            var isUnchanged = status == "M" && !actuallyModified.Contains(normalizedPath);
+
+                            if (isUnchanged)
+                                status = "♦";
+
+                            var item = new HgFileItem
+                            {
+                                Status = status,
+                                Path = path,
+                                IsUnchanged = isUnchanged,
+                                Identity = "file|" + path
+                            };
+                            statusItems.Add(item);
+                            if (status == "A") lastAddedItem = item;
                         }
+
+                        foreach (var item in statusItems)
+                        {
+                            if (item.Status == "A" &&
+                                !string.IsNullOrEmpty(item.OriginalPath) &&
+                                removedPaths.Contains(item.OriginalPath.Replace('/', '\\')))
+                                item.Status = "R";
+                        }
+
+                        fileList.AddRange(statusItems);
                     }
                     else
                     {
@@ -1273,7 +1299,8 @@ namespace HgVs.ViewModels
             item != null &&
             !string.IsNullOrEmpty(_currentBaseRev) &&
             _currentBaseRev != "null" &&
-            (item.Status == "M" || item.Status == "♦");
+            (item.Status == "M" || item.Status == "♦" ||
+             (item.Status == "R" && !string.IsNullOrEmpty(item.OriginalPath)));
 
         private async Task DiffFileAsync(HgFileItem item)
         {
@@ -1293,11 +1320,13 @@ namespace HgVs.ViewModels
 
             try
             {
-                var success = RunHgCommand(repoRoot, $"cat -r \"{_currentBaseRev}\" \"{item.Path}\"", out _, out var error, tempFileWithExt);
+                var basePath = string.IsNullOrEmpty(item.OriginalPath) ? item.Path : item.OriginalPath;
+                var success = RunHgCommand(repoRoot, $"cat -r \"{_currentBaseRev}\" \"{basePath}\"", out _, out var error, tempFileWithExt);
                 if (success)
                 {
                     var diffService = (IVsDifferenceService)ServiceProvider.GlobalProvider.GetService(typeof(SVsDifferenceService));
-                    diffService?.OpenComparisonWindow2(tempFileWithExt, currentFilePath, $"Diff: {item.Path}", $"Hg Base ({_currentBaseRev}) vs Local", "Base Version", "Local Version", null, null, 0);
+                    var baseCaption = string.IsNullOrEmpty(item.OriginalPath) ? "Base Version" : "Base: " + item.OriginalPath;
+                    diffService?.OpenComparisonWindow2(tempFileWithExt, currentFilePath, $"Diff: {item.Path}", $"Hg Base ({_currentBaseRev}) vs Local", baseCaption, "Local Version", null, null, 0);
                 }
                 else
                     MessageBox.Show($"Could not retrieve base version.\nHG Error: {error}");
