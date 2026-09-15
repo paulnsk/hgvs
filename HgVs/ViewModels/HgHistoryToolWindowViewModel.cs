@@ -112,8 +112,9 @@ namespace HgVs.ViewModels
                 {
                     var list = new System.Collections.Generic.List<HgHistoryItem>();
                     var historyPath = GetWorkingCopySourcePath(repoRoot, relativePath) ?? relativePath;
+                    var revsetPath = historyPath.Replace('\\', '/').Replace("'", "\\'");
                     var template = "{rev}\\0{node|short}\\0{author|person}\\0{date|isodate}\\0{desc|firstline}\\0{file_copies % '{name}\\0{source}\\0'}\\x1e";
-                    if (RunHgCommand(repoRoot, $"log -f -r \"reverse(ancestors(.))\" \"{historyPath}\" --template \"{template}\"", out var output, out var error))
+                    if (RunHgCommand(repoRoot, $"log -r \"reverse(follow('{revsetPath}', .))\" --template \"{template}\"", out var output, out var error))
                     {
                         var records = output.Split(new[] { '\x1e' }, StringSplitOptions.RemoveEmptyEntries);
                         foreach (var record in records)
@@ -327,30 +328,24 @@ namespace HgVs.ViewModels
 
                 using (var process = System.Diagnostics.Process.Start(psi))
                 {
-                    if (outputFile != null)
+                    using (var outputStream = outputFile != null
+                               ? (Stream)new FileStream(outputFile, FileMode.Create, FileAccess.Write)
+                               : new MemoryStream())
+                    using (var errorStream = new MemoryStream())
                     {
-                        using (var fs = new FileStream(outputFile, FileMode.Create, FileAccess.Write))
-                            process.StandardOutput.BaseStream.CopyTo(fs);
-                        using (var ms = new MemoryStream())
+                        ThreadHelper.JoinableTaskFactory.Run(async () =>
                         {
-                            process.StandardError.BaseStream.CopyTo(ms);
-                            error = HgOutputDecoder.Decode(ms.ToArray());
-                        }
+                            var outputTask = process.StandardOutput.BaseStream.CopyToAsync(outputStream);
+                            var errorTask = process.StandardError.BaseStream.CopyToAsync(errorStream);
+                            await Task.WhenAll(outputTask, errorTask);
+                        });
+                        process.WaitForExit();
+
+                        if (outputFile == null)
+                            output = HgOutputDecoder.Decode(((MemoryStream)outputStream).ToArray());
+                        error = HgOutputDecoder.Decode(errorStream.ToArray());
                     }
-                    else
-                    {
-                        using (var ms = new MemoryStream())
-                        {
-                            process.StandardOutput.BaseStream.CopyTo(ms);
-                            output = HgOutputDecoder.Decode(ms.ToArray());
-                        }
-                        using (var ms = new MemoryStream())
-                        {
-                            process.StandardError.BaseStream.CopyTo(ms);
-                            error = HgOutputDecoder.Decode(ms.ToArray());
-                        }
-                    }
-                    process.WaitForExit();
+
                     return process.ExitCode == 0;
                 }
             }
