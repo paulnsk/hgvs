@@ -11,6 +11,7 @@ HgVs is a Visual Studio 2022 and Visual Studio 2026 extension that adds practica
 - Track viewed and not-viewed changed files persistently across branches and projects.
 - Navigate TODO comments in changed files, including unsaved editor contents.
 - Inspect Mercurial file history and open historical revisions.
+- Follow renamed files when opening or comparing historical revisions.
 - Revert selected changes.
 - Export open editor files to a directory or Total Commander.
 

@@ -111,14 +111,15 @@ namespace HgVs.ViewModels
                 var result = await Task.Run(() =>
                 {
                     var list = new System.Collections.Generic.List<HgHistoryItem>();
-                    var template = "{rev}|{node|short}|{author|person}|{date|isodate}|{desc|firstline}";
-                    if (RunHgCommand(repoRoot, $"log -f \"{relativePath}\" --template \"{template}\n\"", out var output, out var error))
+                    var historyPath = GetWorkingCopySourcePath(repoRoot, relativePath) ?? relativePath;
+                    var template = "{rev}\\0{node|short}\\0{author|person}\\0{date|isodate}\\0{desc|firstline}\\0{file_copies % '{name}\\0{source}\\0'}\\x1e";
+                    if (RunHgCommand(repoRoot, $"log -f -r \"reverse(ancestors(.))\" \"{historyPath}\" --template \"{template}\"", out var output, out var error))
                     {
-                        var lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                        foreach (var line in lines)
+                        var records = output.Split(new[] { '\x1e' }, StringSplitOptions.RemoveEmptyEntries);
+                        foreach (var record in records)
                         {
-                            var parts = line.Split(new[] { '|' }, 5);
-                            if (parts.Length == 5)
+                            var parts = record.Split('\0');
+                            if (parts.Length >= 5)
                             {
                                 list.Add(new HgHistoryItem
                                 {
@@ -126,8 +127,18 @@ namespace HgVs.ViewModels
                                     Node = parts[1],
                                     Author = parts[2],
                                     Date = parts[3],
-                                    Message = parts[4]
+                                    Message = parts[4],
+                                    FilePath = historyPath
                                 });
+
+                                for (var index = 5; index + 1 < parts.Length; index += 2)
+                                {
+                                    if (RepoPathsEqual(parts[index], historyPath))
+                                    {
+                                        historyPath = parts[index + 1];
+                                        break;
+                                    }
+                                }
                             }
                         }
                     }
@@ -268,9 +279,33 @@ namespace HgVs.ViewModels
                 try { File.Delete(tempPath); } catch { }
             }
 
-            var success = RunHgCommand(repoRoot, $"cat -r \"{item.Revision}\" \"{relativePath}\"", out _, out _, tempPath);
+            var revisionPath = string.IsNullOrEmpty(item.FilePath) ? relativePath : item.FilePath;
+            var success = RunHgCommand(repoRoot, $"cat -r \"{item.Revision}\" \"{revisionPath}\"", out _, out _, tempPath);
             return success ? tempPath : null;
         }
+
+        private string GetWorkingCopySourcePath(string repoRoot, string relativePath)
+        {
+            if (!RunHgCommand(repoRoot, $"status -aC \"{relativePath}\"", out var output, out _))
+                return null;
+
+            var lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            for (var index = 0; index + 1 < lines.Length; index++)
+            {
+                if (lines[index].StartsWith("A ", StringComparison.Ordinal) &&
+                    RepoPathsEqual(lines[index].Substring(2).Trim(), relativePath) &&
+                    lines[index + 1].StartsWith("  ", StringComparison.Ordinal))
+                    return lines[index + 1].Substring(2).Trim();
+            }
+
+            return null;
+        }
+
+        private static bool RepoPathsEqual(string left, string right) =>
+            string.Equals(
+                left?.Replace('/', '\\'),
+                right?.Replace('/', '\\'),
+                StringComparison.OrdinalIgnoreCase);
 
         private bool RunHgCommand(string workDir, string args, out string output, out string error, string outputFile = null)
         {
