@@ -113,7 +113,7 @@ namespace HgVs.ViewModels
                     var list = new System.Collections.Generic.List<HgHistoryItem>();
                     var historyPath = GetWorkingCopySourcePath(repoRoot, relativePath) ?? relativePath;
                     var revsetPath = historyPath.Replace('\\', '/').Replace("'", "\\'");
-                    var template = "{rev}\\0{node|short}\\0{author|person}\\0{date|isodate}\\0{desc|firstline}\\0{file_copies % '{name}\\0{source}\\0'}\\x1e";
+                    var template = "{rev}\\0{node|short}\\0{author|person}\\0{date|isodate}\\0{desc|firstline}\\0{ifeq(rev, 0, '', file_copies % '{name}\\0{source}\\0')}\\x1e";
                     if (RunHgCommand(repoRoot, $"log -r \"reverse(follow('{revsetPath}', .))\" --template \"{template}\"", out var output, out var error))
                     {
                         var records = output.Split(new[] { '\x1e' }, StringSplitOptions.RemoveEmptyEntries);
