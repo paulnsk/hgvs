@@ -57,6 +57,7 @@
     <Compile Include="Models\HgMergeBaseCandidate.cs" />
     <Compile Include="Models\HgOutputDecoder.cs" />
     <Compile Include="ViewModels\HgToolWindowViewModel.cs" />
+    <Compile Include="ViewModels\HgFileTree.cs" />
     <Compile Include="FileCopyCommand.cs" />
     <Compile Include="FileDumpLogic.cs" />
     <Compile Include="HgToolWindow.cs" />

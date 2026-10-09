@@ -44,7 +44,20 @@ namespace HgVs.Views
                      sender is HgToolWindowViewModel vm &&
                      vm.SelectedItem != null)
             {
-                lvFiles.ScrollIntoView(vm.SelectedItem);
+                if (vm.IsTreeMode)
+                {
+                    var row = vm.FileTree.SelectedRow?.File == vm.SelectedItem
+                        ? vm.FileTree.SelectedRow
+                        : vm.FileTree.SelectFile(vm.SelectedItem);
+                    if (row != null) lvTree.ScrollIntoView(row);
+                }
+                else
+                    lvFiles.ScrollIntoView(vm.SelectedItem);
+            }
+            else if (e.PropertyName == nameof(HgToolWindowViewModel.IsTreeMode) &&
+                     sender is HgToolWindowViewModel layoutVm)
+            {
+                UpdateUndoSelection(layoutVm);
             }
         }
 
@@ -74,6 +87,19 @@ namespace HgVs.Views
         {
             if (item == null) return;
 
+            if (DataContext is HgToolWindowViewModel vm && vm.IsTreeMode)
+            {
+                var row = vm.FileTree.SelectFile(item);
+                if (row == null) return;
+                lvTree.ScrollIntoView(row);
+                lvTree.UpdateLayout();
+                if (lvTree.ItemContainerGenerator.ContainerFromItem(row) is ListBoxItem treeContainer)
+                    treeContainer.Focus();
+                else
+                    lvTree.Focus();
+                return;
+            }
+
             lvFiles.SelectedItem = item;
             lvFiles.ScrollIntoView(item);
             lvFiles.UpdateLayout();
@@ -88,8 +114,7 @@ namespace HgVs.Views
         {
             if (DataContext is HgToolWindowViewModel vm)
             {
-                // Принудительно заставляем команду Undo перепроверить CanExecute (т.к. поменялось количество выделенных файлов)
-                vm.UndoCommand.NotifyCanExecuteChanged();
+                if (!vm.IsTreeMode) UpdateUndoSelection(vm);
             }
         }
 
@@ -149,8 +174,101 @@ namespace HgVs.Views
                 !(element.DataContext is HgFileItem item) ||
                 !(DataContext is HgToolWindowViewModel vm)) return;
 
-            lvFiles.SelectedItem = item;
+            if (vm.IsTreeMode)
+                vm.FileTree.SelectFile(item);
+            else
+                lvFiles.SelectedItem = item;
             vm.ToggleReviewed(item);
+        }
+
+        private void UpdateUndoSelection(HgToolWindowViewModel vm)
+        {
+            var files = new System.Collections.Generic.List<HgFileItem>();
+            if (vm.IsTreeMode)
+            {
+                foreach (var selected in lvTree.SelectedItems)
+                    if (selected is HgTreeRow row && row.File != null) files.Add(row.File);
+            }
+            else
+            {
+                foreach (var selected in lvFiles.SelectedItems)
+                    if (selected is HgFileItem file) files.Add(file);
+            }
+            vm.SelectedUndoItems = files;
+        }
+
+        private void Tree_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!(DataContext is HgToolWindowViewModel vm) || !vm.IsTreeMode) return;
+            UpdateUndoSelection(vm);
+            if (lvTree.SelectedItem != null) lvTree.ScrollIntoView(lvTree.SelectedItem);
+        }
+
+        private void Tree_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (!(sender is ListBoxItem item) || !(item.DataContext is HgTreeRow row) ||
+                !(DataContext is HgToolWindowViewModel vm)) return;
+            e.Handled = true;
+            vm.FileTree.SelectedRow = row;
+            if (row.IsFolder)
+            {
+                vm.FileTree.Toggle(row);
+                lvTree.Focus();
+            }
+            else ActivateItem(row.File);
+        }
+
+        private void Tree_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (!(sender is ListBoxItem item) || !(item.DataContext is HgTreeRow row) ||
+                !(DataContext is HgToolWindowViewModel vm)) return;
+            vm.FileTree.SelectedRow = row;
+            item.Focus();
+        }
+
+        private void TreeArrow_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+            if (e.ClickCount != 1 || !(sender is FrameworkElement element) ||
+                !(element.DataContext is HgTreeRow row) || !(DataContext is HgToolWindowViewModel vm)) return;
+            vm.FileTree.SelectedRow = row;
+            vm.FileTree.Toggle(row);
+            lvTree.Focus();
+        }
+
+        private void Tree_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.IsRepeat || !(DataContext is HgToolWindowViewModel vm) ||
+                !(lvTree.SelectedItem is HgTreeRow row)) return;
+            if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                if (row.IsFolder)
+                {
+                    vm.FileTree.Toggle(row);
+                    lvTree.Focus();
+                }
+                else ActivateItem(row.File);
+            }
+            else if (e.Key == Key.Space && row.File != null)
+            {
+                e.Handled = true;
+                vm.ToggleReviewed(row.File);
+            }
+            else if (e.Key == Key.Left)
+            {
+                e.Handled = true;
+                if (row.IsFolder && row.IsExpanded) vm.FileTree.Toggle(row);
+                else if (row.Parent != null) vm.FileTree.SelectedRow = row.Parent;
+                lvTree.Focus();
+            }
+            else if (e.Key == Key.Right && row.IsFolder)
+            {
+                e.Handled = true;
+                if (!row.IsExpanded) vm.FileTree.Toggle(row);
+                else if (row.Children.Count > 0) vm.FileTree.SelectedRow = row.Children[0];
+                lvTree.Focus();
+            }
         }
 
         private void LvFiles_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)

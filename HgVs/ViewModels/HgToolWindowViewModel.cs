@@ -99,6 +99,7 @@ namespace HgVs.ViewModels
                 if (!SetProperty(ref _selectedListMode, value)) return;
 
                 OnPropertyChanged(nameof(IsTodoMode));
+                OnPropertyChanged(nameof(IsTreeMode));
                 UndoCommand.NotifyCanExecuteChanged();
 
                 if (value == HgListMode.Todo)
@@ -112,10 +113,40 @@ namespace HgVs.ViewModels
                     _todoRefreshTimer.Stop();
                     ShowFileItems();
                 }
+                FileTree.SetActive(IsTreeMode);
+                if (IsTreeMode) FileTree.SelectFile(SelectedItem);
             }
         }
 
         public bool IsTodoMode => SelectedListMode == HgListMode.Todo;
+
+        private bool _useTreeView;
+        public bool UseTreeView
+        {
+            get => _useTreeView;
+            set
+            {
+                if (!SetProperty(ref _useTreeView, value)) return;
+                OnPropertyChanged(nameof(IsTreeMode));
+                FileTree.SetActive(IsTreeMode);
+                if (IsTreeMode) FileTree.SelectFile(SelectedItem);
+                SaveSettings();
+            }
+        }
+
+        public bool IsTreeMode => UseTreeView && !IsTodoMode;
+        public HgFileTree FileTree { get; }
+
+        private System.Collections.IList _selectedUndoItems;
+        public System.Collections.IList SelectedUndoItems
+        {
+            get => _selectedUndoItems;
+            set
+            {
+                if (SetProperty(ref _selectedUndoItems, value))
+                    UndoCommand.NotifyCanExecuteChanged();
+            }
+        }
 
         private HgFileItem _selectedItem;
         public HgFileItem SelectedItem
@@ -228,7 +259,10 @@ namespace HgVs.ViewModels
             FilesView = CollectionViewSource.GetDefaultView(Files);
             FilesView.Filter = FileFilter;
 
+            FileTree = new HgFileTree(FilesView, () => _repoRoot, item => SelectedItem = item);
+
             LoadSettings();
+            FileTree.SetActive(IsTreeMode);
 
             // Первый запуск
             RefreshCommand.Execute(null);
@@ -290,6 +324,7 @@ namespace HgVs.ViewModels
                 if (_settingsStore.PropertyExists(CollectionName, "Exclude")) ExcludeText = _settingsStore.GetString(CollectionName, "Exclude");
                 if (_settingsStore.PropertyExists(CollectionName, "CompareBranch")) _compareBranchName = _settingsStore.GetString(CollectionName, "CompareBranch");
                 if (_settingsStore.PropertyExists(CollectionName, "HideUnchanged")) _hideUnchanged = _settingsStore.GetBoolean(CollectionName, "HideUnchanged");
+                if (_settingsStore.PropertyExists(CollectionName, "UseTreeView")) _useTreeView = _settingsStore.GetBoolean(CollectionName, "UseTreeView");
                 if (_settingsStore.PropertyExists(CollectionName, ReviewedFilesPropertyName))
                     LoadReviewedPaths(_settingsStore.GetString(CollectionName, ReviewedFilesPropertyName));
             }
@@ -307,6 +342,7 @@ namespace HgVs.ViewModels
                 _settingsStore.SetString(CollectionName, "Exclude", ExcludeText ?? "");
                 _settingsStore.SetString(CollectionName, "CompareBranch", CompareBranchName ?? "");
                 _settingsStore.SetBoolean(CollectionName, "HideUnchanged", HideUnchanged);
+                _settingsStore.SetBoolean(CollectionName, "UseTreeView", UseTreeView);
             }
             catch { /* Ignore */ }
         }

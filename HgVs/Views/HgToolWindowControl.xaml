@@ -330,13 +330,20 @@
                          IsChecked="{Binding SelectedListMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter={x:Static models:HgListMode.Files}}"/>
                     <RadioButton Content="TODO" GroupName="ListMode" Style="{StaticResource RadioOptionStyle}" Margin="0"
                          IsChecked="{Binding SelectedListMode, Converter={StaticResource EnumToBoolConverter}, ConverterParameter={x:Static models:HgListMode.Todo}}"/>
+                    <Border Width="1" Margin="9,0" Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowFrameKey}}"/>
+                    <StackPanel Orientation="Horizontal" IsEnabled="{Binding IsTodoMode, Converter={StaticResource InverseBoolConverter}}">
+                        <RadioButton Content="List" GroupName="FileLayout" Style="{StaticResource RadioOptionStyle}" Margin="0,0,9,0"
+                                     IsChecked="{Binding UseTreeView, Converter={StaticResource InverseBoolConverter}}"/>
+                        <RadioButton Content="Tree" GroupName="FileLayout" Style="{StaticResource RadioOptionStyle}" Margin="0"
+                                     IsChecked="{Binding UseTreeView}"/>
+                    </StackPanel>
                 </StackPanel>
             </Border>
             <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
                 <Button Content="Refresh" Width="80" Height="25" Margin="0,0,5,0" Command="{Binding RefreshCommand}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"/>
                 <Button Content="Open All" Width="80" Height="25" Margin="0,0,5,0" Command="{Binding OpenAllCommand}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"/>
                 <Button Content="Undo Changes" Width="90" Height="25"
-                        Command="{Binding UndoCommand}" CommandParameter="{Binding SelectedItems, ElementName=lvFiles}"/>
+                        Command="{Binding UndoCommand}" CommandParameter="{Binding SelectedUndoItems}"/>
             </StackPanel>
         </DockPanel>
 
@@ -496,6 +503,15 @@
                   BorderThickness="0" GridViewColumnHeader.Click="GridViewColumnHeader_Click"
                   SelectionChanged="LvFiles_SelectionChanged"
                   PreviewKeyDown="LvFiles_PreviewKeyDown">
+            <ListView.Style>
+                <Style TargetType="ListView">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsTreeMode}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </ListView.Style>
             <ListView.ContextMenu>
                 <ContextMenu Opened="FileContextMenu_Opened"
                              Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
@@ -548,7 +564,7 @@
                         <GridViewColumnHeader Content="Rv" Padding="0" ToolTip="Review"/>
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
-                                <Border Background="Transparent" HorizontalAlignment="Stretch" Height="18"
+                                <Border Background="Transparent" HorizontalAlignment="Stretch" Height="18" Cursor="Hand"
                                         MouseLeftButtonDown="ReviewCell_MouseLeftButtonDown">
                                     <Border.Style>
                                         <Style TargetType="Border">
@@ -607,5 +623,118 @@
                 </GridView>
             </ListView.View>
         </ListView>
+        <ListBox x:Name="lvTree" Grid.Row="5" Margin="5" BorderThickness="0"
+                 ItemsSource="{Binding FileTree.Rows}" SelectedItem="{Binding FileTree.SelectedRow, Mode=TwoWay}"
+                 Visibility="{Binding IsTreeMode, Converter={StaticResource BoolToVis}}"
+                 Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
+                 Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"
+                 ContextMenu="{Binding ContextMenu, ElementName=lvFiles}"
+                 SelectionChanged="Tree_SelectionChanged" PreviewKeyDown="Tree_PreviewKeyDown"
+                 ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.CanContentScroll="True"
+                 VirtualizingStackPanel.IsVirtualizing="True" VirtualizingStackPanel.VirtualizationMode="Recycling">
+            <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem">
+                    <Setter Property="Padding" Value="2,1"/>
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    <Setter Property="Background" Value="Transparent"/>
+                    <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ListBoxItem">
+                                <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                    <EventSetter Event="MouseDoubleClick" Handler="Tree_MouseDoubleClick"/>
+                    <EventSetter Event="PreviewMouseRightButtonDown" Handler="Tree_PreviewMouseRightButtonDown"/>
+                    <Style.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarHoverKey}}"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource {x:Static vsshell:VsBrushes.HighlightKey}}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.HighlightTextKey}}"/>
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </ListBox.ItemContainerStyle>
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Grid Margin="{Binding Indent}" MinHeight="20">
+                        <StackPanel Orientation="Horizontal">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsFolder}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <Border Width="16"/>
+                            <TextBlock Width="18" Text="{Binding File.Status}" FontWeight="Bold" VerticalAlignment="Center"
+                                       Foreground="{Binding File.Status, Converter={StaticResource StatusColorConverter}}"/>
+                            <Border Width="18" Height="20" Background="Transparent" Cursor="Hand"
+                                    DataContext="{Binding File}" MouseLeftButtonDown="ReviewCell_MouseLeftButtonDown">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="ToolTip" Value="not viewed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsReviewed}" Value="True">
+                                                <Setter Property="ToolTip" Value="viewed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <Ellipse Width="8" Height="8" Fill="#FFB9A66A" Stroke="#FFB9A66A" StrokeThickness="1.2">
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsReviewed}" Value="True">
+                                                    <Setter Property="Visibility" Value="Hidden"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                            </Border>
+                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" ToolTip="{Binding File.Path}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding File.IsUnchanged}" Value="True">
+                                                <Setter Property="Foreground" Value="{DynamicResource {x:Static vsshell:VsBrushes.DropDownDisabledGlyphKey}}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Visibility="{Binding IsFolder, Converter={StaticResource BoolToVis}}">
+                            <Border Width="16" Background="Transparent" Cursor="Hand" MouseLeftButtonDown="TreeArrow_MouseLeftButtonDown">
+                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="▸"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                                    <Setter Property="Text" Value="▾"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Border>
+                            <Path Width="14" Height="12" Margin="2,0,6,0" Stretch="Uniform" VerticalAlignment="Center"
+                                  Data="M 1,3 L 1,11 L 13,11 L 13,3 L 7,3 L 5,1 L 1,1 Z"
+                                  Stroke="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}" StrokeThickness="1"/>
+                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" ToolTip="{Binding Key}"/>
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
     </Grid>
 </UserControl>
