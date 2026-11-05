@@ -365,8 +365,12 @@
                                      IsChecked="{Binding UseTreeView}"/>
                         <!-- Collapse by rule: the icon applies the last rule, the arrow opens the rule menu -->
                         <StackPanel x:Name="CollapseRulePanel" Orientation="Horizontal" Margin="5,0,0,0"
-                                    IsEnabled="{Binding IsTreeMode}" ToolTip="{Binding CollapseButtonToolTip}"
-                                    ToolTipService.ShowOnDisabled="True">
+                                    IsEnabled="{Binding IsTreeMode}" ToolTipService.ShowOnDisabled="True">
+                            <StackPanel.ToolTip>
+                                <TextBlock>
+                                    <Run Text="Expand: "/><Run Text="{Binding CollapseRuleDisplayName, Mode=OneWay}" FontWeight="Bold"/>
+                                </TextBlock>
+                            </StackPanel.ToolTip>
                             <Button Style="{StaticResource InlineIconButtonStyle}" Width="18" Height="17" Click="CollapseRuleApply_Click">
                                 <Path Width="13" Height="13" SnapsToDevicePixels="True" StrokeThickness="1"
                                       Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"

@@ -145,14 +145,12 @@ namespace HgVs.ViewModels
             private set
             {
                 if (!SetProperty(ref _collapseRuleName, value ?? "")) return;
-                OnPropertyChanged(nameof(CollapseButtonToolTip));
+                OnPropertyChanged(nameof(CollapseRuleDisplayName));
                 SaveSettings();
             }
         }
 
-        public string CollapseButtonToolTip => string.IsNullOrEmpty(CollapseRuleName)
-            ? "Collapse folders by rule: choose a rule"
-            : $"Collapse folders by rule: {CollapseRuleName}\nExpands folders with matching files, collapses the rest";
+        public string CollapseRuleDisplayName => string.IsNullOrEmpty(CollapseRuleName) ? "choose a rule" : CollapseRuleName;
 
         public void ApplyCollapseRule(HgCollapseRule rule)
         {
