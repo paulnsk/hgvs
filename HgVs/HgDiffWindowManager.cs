@@ -4,8 +4,12 @@ using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
 using Microsoft.VisualStudio;
+using Microsoft.VisualStudio.Editor;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
+using Microsoft.VisualStudio.Text;
+using Microsoft.VisualStudio.Text.Differencing;
+using Microsoft.VisualStudio.Text.Editor;
 
 namespace HgVs
 {
@@ -57,7 +61,8 @@ namespace HgVs
         /// Открывает дифф или активирует уже открытый с тем же содержимым.
         /// Временные копии (leftPath всегда, rightPath если это не рабочая копия) переходят во владение менеджера.
         /// </summary>
-        public static void OpenComparison(string workingFilePath, string leftPath, string rightPath, bool rightIsWorkingCopy,
+        /// <returns>Окно диффа (открытое или активированное), либо null.</returns>
+        public static IVsWindowFrame OpenComparison(string workingFilePath, string leftPath, string rightPath, bool rightIsWorkingCopy,
             string caption, string tooltip, string leftLabel, string rightLabel)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
@@ -69,12 +74,34 @@ namespace HgVs
             if (TryActivate(key))
             {
                 foreach (var file in tempFiles) DeleteTempFile(file);
-                return;
+                return Frames[key];
             }
 
             var diffService = (IVsDifferenceService)ServiceProvider.GlobalProvider.GetService(typeof(SVsDifferenceService));
             var frame = diffService?.OpenComparisonWindow2(leftPath, rightPath, caption, tooltip, leftLabel, rightLabel, null, null, 0);
             Register(key, frame, tempFiles);
+            return frame;
+        }
+
+        /// <summary>Ставит курсор правой (или inline) части диффа на строку рабочего файла и прокручивает к ней.</summary>
+        public static void GoToRightLine(IVsWindowFrame frame, int lineNumber)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            if (frame == null ||
+                frame.GetProperty((int)__VSFPROPID.VSFPROPID_DocView, out var docView) != VSConstants.S_OK ||
+                !(docView is IVsDifferenceCodeWindow codeWindow) ||
+                codeWindow.DifferenceViewer == null)
+                return;
+
+            var viewer = codeWindow.DifferenceViewer;
+            var view = viewer.ViewMode == DifferenceViewMode.Inline ? viewer.InlineView : viewer.RightView;
+            var rightSnapshot = viewer.DifferenceBuffer.RightBuffer.CurrentSnapshot;
+            var line = rightSnapshot.GetLineFromLineNumber(Math.Max(0, Math.Min(lineNumber, rightSnapshot.LineCount - 1)));
+            var point = view.BufferGraph.MapUpToSnapshot(line.Start, PointTrackingMode.Positive, PositionAffinity.Successor, view.TextSnapshot);
+            if (point == null) return;
+
+            view.Caret.MoveTo(point.Value);
+            view.ViewScroller.EnsureSpanVisible(new SnapshotSpan(point.Value, point.Value), EnsureSpanVisibleOptions.AlwaysCenter);
         }
 
         /// <summary>Открывает временную копию версии файла или активирует уже открытую с тем же содержимым.</summary>

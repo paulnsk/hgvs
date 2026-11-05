@@ -184,6 +184,23 @@ namespace HgVs.ViewModels
             set { if (SetProperty(ref _showUntracked, value)) RefreshCommand.Execute(null); }
         }
 
+        /// <summary>Полоса «изменён относительно последнего коммита» над редакторами. Настройка общая для всех окон.</summary>
+        public bool ShowDiffBar
+        {
+            get
+            {
+                ThreadHelper.ThrowIfNotOnUIThread();
+                return HgDiffBarSettings.IsEnabled;
+            }
+            set
+            {
+                ThreadHelper.ThrowIfNotOnUIThread();
+                if (HgDiffBarSettings.IsEnabled == value) return;
+                HgDiffBarSettings.IsEnabled = value;
+                OnPropertyChanged();
+            }
+        }
+
         private bool _hideUnchanged;
         public bool HideUnchanged
         {

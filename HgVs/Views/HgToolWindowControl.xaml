@@ -482,6 +482,8 @@
             </StackPanel>
 
             <CheckBox Content="Show Untracked (?)" IsChecked="{Binding ShowUntracked}" Style="{StaticResource CheckOptionStyle}" Margin="10,0,0,0"/>
+            <CheckBox Content="Diff Bar" IsChecked="{Binding ShowDiffBar}" Style="{StaticResource CheckOptionStyle}" Margin="10,0,0,0"
+                      ToolTip="Show a bar above editors of files changed since the last commit, with a View Diff button"/>
             <CheckBox Content="Hide Unchanged" IsChecked="{Binding HideUnchanged}" Style="{StaticResource CheckOptionStyle}"
                       Margin="10,0,0,0" Visibility="{Binding HasUnchangedFiles, Converter={StaticResource BoolToVis}}"/>
         </WrapPanel>
