@@ -179,8 +179,8 @@ namespace HgVs.ViewModels
 
             if (!string.IsNullOrEmpty(tempFile) && File.Exists(tempFile))
             {
-                var dte = (DTE2)ServiceProvider.GlobalProvider.GetService(typeof(DTE));
-                try { dte.ItemOperations.OpenFile(tempFile); } catch { }
+                try { HgDiffWindowManager.OpenTempFile(TargetFilePath, tempFile); }
+                catch { HgDiffWindowManager.DeleteTempFile(tempFile); }
             }
         }
 
@@ -251,13 +251,21 @@ namespace HgVs.ViewModels
                 }
             }
 
+            var rightIsWorkingCopy = rightPath == TargetFilePath;
             if (!string.IsNullOrEmpty(leftPath) && !string.IsNullOrEmpty(rightPath) && File.Exists(leftPath) && File.Exists(rightPath))
             {
-                var diffService = (IVsDifferenceService)ServiceProvider.GlobalProvider.GetService(typeof(SVsDifferenceService));
                 var title = $"Diff: {Path.GetFileName(TargetFilePath)}";
                 var tooltip = $"{leftLabel} vs {rightLabel}";
-                diffService?.OpenComparisonWindow2(leftPath, rightPath, title, tooltip, leftLabel, rightLabel, null, null, 0);
+                try
+                {
+                    HgDiffWindowManager.OpenComparison(TargetFilePath, leftPath, rightPath, rightIsWorkingCopy, title, tooltip, leftLabel, rightLabel);
+                    return;
+                }
+                catch (Exception ex) { MessageBox.Show("Error opening diff: " + ex.Message); }
             }
+
+            HgDiffWindowManager.DeleteTempFile(leftPath);
+            if (!rightIsWorkingCopy) HgDiffWindowManager.DeleteTempFile(rightPath);
         }
 
         private string ExtractFile(HgHistoryItem item, string repoRoot, string relativePath, string contextPrefix)
@@ -273,16 +281,13 @@ namespace HgVs.ViewModels
             var safeDate = new string(item.Date.Select(c => invalidChars.Contains(c) ? '-' : c).ToArray());
 
             var tempFileName = $"{nameWithoutExt}_{contextPrefix}_rev{item.Revision}_{safeAuthor}_{safeDate}{ext}";
-            var tempPath = Path.Combine(Path.GetTempPath(), tempFileName);
-
-            if (File.Exists(tempPath))
-            {
-                try { File.Delete(tempPath); } catch { }
-            }
+            var tempPath = HgDiffWindowManager.CreateTempFilePath(tempFileName);
 
             var revisionPath = string.IsNullOrEmpty(item.FilePath) ? relativePath : item.FilePath;
             var success = RunHgCommand(repoRoot, $"cat -r \"{item.Revision}\" \"{revisionPath}\"", out _, out _, tempPath);
-            return success ? tempPath : null;
+            if (success) return tempPath;
+            HgDiffWindowManager.DeleteTempFile(tempPath);
+            return null;
         }
 
         private string GetWorkingCopySourcePath(string repoRoot, string relativePath)

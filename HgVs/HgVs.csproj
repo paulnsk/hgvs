@@ -46,6 +46,7 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="HgDiffWindowManager.cs" />
     <Compile Include="HgHistoryCommand.cs" />
     <Compile Include="HgHistoryToolWindow.cs" />
     <Compile Include="Models\HgHistoryItem.cs" />

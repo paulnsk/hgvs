@@ -1349,25 +1349,28 @@ namespace HgVs.ViewModels
             var repoRoot = FindRepoRoot(solutionDir);
             var currentFilePath = Path.Combine(repoRoot, item.Path);
 
-            var tempFile = Path.GetTempFileName();
-            var extension = Path.GetExtension(item.Path);
-            var tempFileWithExt = tempFile + extension;
-            File.Move(tempFile, tempFileWithExt);
+            var basePath = string.IsNullOrEmpty(item.OriginalPath) ? item.Path : item.OriginalPath;
+            var tempFileWithExt = HgDiffWindowManager.CreateTempFilePath(Path.GetFileName(basePath));
 
             try
             {
-                var basePath = string.IsNullOrEmpty(item.OriginalPath) ? item.Path : item.OriginalPath;
                 var success = RunHgCommand(repoRoot, $"cat -r \"{_currentBaseRev}\" \"{basePath}\"", out _, out var error, tempFileWithExt);
                 if (success)
                 {
-                    var diffService = (IVsDifferenceService)ServiceProvider.GlobalProvider.GetService(typeof(SVsDifferenceService));
                     var baseCaption = string.IsNullOrEmpty(item.OriginalPath) ? "Base Version" : "Base: " + item.OriginalPath;
-                    diffService?.OpenComparisonWindow2(tempFileWithExt, currentFilePath, $"Diff: {item.Path}", $"Hg Base ({_currentBaseRev}) vs Local", baseCaption, "Local Version", null, null, 0);
+                    HgDiffWindowManager.OpenComparison(currentFilePath, tempFileWithExt, currentFilePath, true, $"Diff: {item.Path}", $"Hg Base ({_currentBaseRev}) vs Local", baseCaption, "Local Version");
                 }
                 else
+                {
+                    HgDiffWindowManager.DeleteTempFile(tempFileWithExt);
                     MessageBox.Show($"Could not retrieve base version.\nHG Error: {error}");
+                }
             }
-            catch (Exception ex) { MessageBox.Show("Error opening diff: " + ex.Message); }
+            catch (Exception ex)
+            {
+                HgDiffWindowManager.DeleteTempFile(tempFileWithExt);
+                MessageBox.Show("Error opening diff: " + ex.Message);
+            }
         }
 
         private void SetSimpleStatus(string msg)
