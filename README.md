@@ -6,6 +6,7 @@ HgVs is a Visual Studio 2022 and Visual Studio 2026 extension that adds practica
 
 - Browse modified, added, removed, and untracked files.
 - Switch between a flat list and a compact folder tree; the choice is remembered.
+- In Tree mode, expand folders with matching files and collapse the rest by a rule (for example, hide unit tests or show only not-viewed files). Rules live in `%APPDATA%\HgVs\collapse-rules.txt`; the button menu edits them and can add default rules.
 - Compare uncommitted changes, the current branch, the parent branch, or a custom branch.
 - Open files normally or open their Mercurial diff; opening the same diff again activates the existing window.
 - Recognize renamed files and compare them with their original paths.

@@ -382,6 +382,113 @@ namespace HgVs.Views
                 vm.MarkMatchingFilesNotViewed(dialog.PatternsText);
         }
 
+        private void CollapseRuleApply_Click(object sender, RoutedEventArgs e)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            if (!(DataContext is HgToolWindowViewModel vm)) return;
+            var rules = LoadCollapseRules();
+            if (rules == null) return;
+
+            var rule = rules.Find(item => string.Equals(item.Name, vm.CollapseRuleName, StringComparison.OrdinalIgnoreCase));
+            if (rule != null)
+                vm.ApplyCollapseRule(rule);
+            else
+                OpenCollapseRuleMenu();
+        }
+
+        private void CollapseRuleMenu_Click(object sender, RoutedEventArgs e)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            OpenCollapseRuleMenu();
+        }
+
+        private void OpenCollapseRuleMenu()
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            if (!(DataContext is HgToolWindowViewModel vm)) return;
+            var rules = LoadCollapseRules();
+            if (rules == null) return;
+
+            var menu = new ContextMenu
+            {
+                PlacementTarget = CollapseRulePanel,
+                Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
+                Background = (Brush)FindResource(VsBrushes.WindowKey),
+                Foreground = (Brush)FindResource(VsBrushes.WindowTextKey)
+            };
+            var itemStyle = (Style)FindResource("FileContextMenuItemStyle");
+
+            foreach (var rule in rules)
+            {
+                var item = new MenuItem
+                {
+                    Header = new TextBlock { Text = rule.Name },
+                    ToolTip = rule.Expression,
+                    Style = itemStyle,
+                    Icon = string.Equals(rule.Name, vm.CollapseRuleName, StringComparison.OrdinalIgnoreCase)
+                        ? new TextBlock { Text = "✓", Foreground = Brushes.CornflowerBlue, FontWeight = FontWeights.Bold }
+                        : null
+                };
+                item.Click += (_, __) => vm.ApplyCollapseRule(rule);
+                menu.Items.Add(item);
+            }
+            if (rules.Count == 0)
+                menu.Items.Add(new MenuItem { Header = new TextBlock { Text = "No rules yet" }, Style = itemStyle, IsEnabled = false });
+
+            menu.Items.Add(new Separator { Style = (Style)FindResource("FileContextMenuSeparatorStyle") });
+
+            var edit = new MenuItem { Header = new TextBlock { Text = "Edit rules…" }, Style = itemStyle, ToolTip = HgCollapseRules.FilePath };
+            edit.Click += (_, __) =>
+            {
+                ThreadHelper.ThrowIfNotOnUIThread();
+                EditCollapseRules();
+            };
+            menu.Items.Add(edit);
+
+            var addDefaults = new MenuItem { Header = new TextBlock { Text = "Add default rules" }, Style = itemStyle };
+            addDefaults.Click += (_, __) => AddDefaultCollapseRules();
+            menu.Items.Add(addDefaults);
+
+            menu.IsOpen = true;
+        }
+
+        private static System.Collections.Generic.List<HgCollapseRule> LoadCollapseRules()
+        {
+            try { return HgCollapseRules.Load(); }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Could not read collapse rules from {HgCollapseRules.FilePath}:\n{ex.Message}", "HgVs", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return null;
+            }
+        }
+
+        private static void EditCollapseRules()
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            try
+            {
+                HgCollapseRules.EnsureFileExists();
+                var dte = (DTE2)ServiceProvider.GlobalProvider.GetService(typeof(EnvDTE.DTE));
+                dte?.ItemOperations.OpenFile(HgCollapseRules.FilePath, EnvDTE.Constants.vsViewKindTextView)?.Activate();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Could not open {HgCollapseRules.FilePath}:\n{ex.Message}", "HgVs", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private void AddDefaultCollapseRules()
+        {
+            try { HgCollapseRules.AddDefaults(); }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Could not write {HgCollapseRules.FilePath}:\n{ex.Message}", "HgVs", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            // Сразу показываем меню с добавленными правилами, чтобы можно было выбрать одно из них.
+            _ = ThreadHelper.JoinableTaskFactory.StartOnIdle(OpenCollapseRuleMenu);
+        }
+
         // Логика сортировки GridView (остается в View, т.к. это чистый UI-механизм)
         private void GridViewColumnHeader_Click(object sender, RoutedEventArgs e)
         {

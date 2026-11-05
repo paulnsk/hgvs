@@ -137,6 +137,30 @@ namespace HgVs.ViewModels
         public bool IsTreeMode => UseTreeView && !IsTodoMode;
         public HgFileTree FileTree { get; }
 
+        private string _collapseRuleName = "";
+        /// <summary>Последнее применённое правило сворачивания дерева.</summary>
+        public string CollapseRuleName
+        {
+            get => _collapseRuleName;
+            private set
+            {
+                if (!SetProperty(ref _collapseRuleName, value ?? "")) return;
+                OnPropertyChanged(nameof(CollapseButtonToolTip));
+                SaveSettings();
+            }
+        }
+
+        public string CollapseButtonToolTip => string.IsNullOrEmpty(CollapseRuleName)
+            ? "Collapse folders by rule: choose a rule"
+            : $"Collapse folders by rule: {CollapseRuleName}\nExpands folders with matching files, collapses the rest";
+
+        public void ApplyCollapseRule(HgCollapseRule rule)
+        {
+            if (rule == null || !IsTreeMode) return;
+            CollapseRuleName = rule.Name;
+            FileTree.ApplyCollapseRule(rule.IsNeeded);
+        }
+
         private System.Collections.IList _selectedUndoItems;
         public System.Collections.IList SelectedUndoItems
         {
@@ -325,6 +349,7 @@ namespace HgVs.ViewModels
                 if (_settingsStore.PropertyExists(CollectionName, "CompareBranch")) _compareBranchName = _settingsStore.GetString(CollectionName, "CompareBranch");
                 if (_settingsStore.PropertyExists(CollectionName, "HideUnchanged")) _hideUnchanged = _settingsStore.GetBoolean(CollectionName, "HideUnchanged");
                 if (_settingsStore.PropertyExists(CollectionName, "UseTreeView")) _useTreeView = _settingsStore.GetBoolean(CollectionName, "UseTreeView");
+                if (_settingsStore.PropertyExists(CollectionName, "CollapseRule")) _collapseRuleName = _settingsStore.GetString(CollectionName, "CollapseRule");
                 if (_settingsStore.PropertyExists(CollectionName, ReviewedFilesPropertyName))
                     LoadReviewedPaths(_settingsStore.GetString(CollectionName, ReviewedFilesPropertyName));
             }
@@ -343,6 +368,7 @@ namespace HgVs.ViewModels
                 _settingsStore.SetString(CollectionName, "CompareBranch", CompareBranchName ?? "");
                 _settingsStore.SetBoolean(CollectionName, "HideUnchanged", HideUnchanged);
                 _settingsStore.SetBoolean(CollectionName, "UseTreeView", UseTreeView);
+                _settingsStore.SetString(CollectionName, "CollapseRule", CollapseRuleName ?? "");
             }
             catch { /* Ignore */ }
         }

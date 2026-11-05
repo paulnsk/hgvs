@@ -99,6 +99,51 @@ public static class HgFileTreeTests
         Assert(tree.Rows.Count == 2 && tree.Rows[0].Name == @"Folder\Nested", "absolute path relative to repository");
         Assert(tree.Rows[0].IsExpanded, "repository switch clears folder collapse state");
         Console.WriteLine("PASS: compact folders, selection, Refresh, filters, Locate, review/R, mode switching, 2000-file batch, absolute paths.");
+        RunCollapseRules();
+    }
+
+    private static void RunCollapseRules()
+    {
+        Assert(HgCollapseRule.Parse("# Disabled: -.Tests\\") == null && HgCollapseRule.Parse("   ") == null, "comments and blank lines");
+        var noTests = HgCollapseRule.Parse(@"Без тестов: -.Tests\ -.Test\");
+        Assert(noTests.Name == "Без тестов", "rule name");
+        Assert(noTests.IsNeeded(File("Src/App.Core/Code.cs", "M")), "code is needed");
+        Assert(!noTests.IsNeeded(File("Src/App.Core.Tests/CodeTests.cs", "M")), "tests excluded, / and \\ equal");
+        Assert(HgCollapseRule.Parse("Только XAML: .XAML").IsNeeded(File("A/View.xaml", "M")), "include, case ignored");
+        Assert(!HgCollapseRule.Parse("Только XAML: .xaml").IsNeeded(File("A/View.cs", "M")), "include filters others");
+        Assert(HgCollapseRule.Parse("W: *.cs").IsNeeded(File("A/B.cs", "M")) && !HgCollapseRule.Parse("W: *.cs").IsNeeded(File("A/B.csproj", "M")), "wildcard matches whole path");
+        var reviewed = File("A/Seen.cs", "M");
+        reviewed.IsReviewed = true;
+        Assert(!HgCollapseRule.Parse("U: unviewed").IsNeeded(reviewed) && HgCollapseRule.Parse("U: unviewed").IsNeeded(File("A/New.cs", "M")), "unviewed");
+
+        var files = new ObservableCollection<HgFileItem>
+        {
+            File("Src/App.Core/Model/Code.cs", "M"),
+            File("Src/App.Core/Other.cs", "M"),
+            File("Src/App.Core.Tests/Model/CodeTests.cs", "M"),
+            File("Src/App.Core.Tests/OtherTests.cs", "M")
+        };
+        var tree = new HgFileTree(new ListCollectionView(files), () => @"D:\repo", file => { });
+        tree.SetActive(true);
+        var testsFolder = tree.Rows.First(row => row.IsFolder && row.Name == "App.Core.Tests");
+        var modelFolder = tree.Rows.First(row => row.IsFolder && row.Key == @"Src\App.Core\Model");
+        tree.Toggle(modelFolder);
+        tree.SelectFile(files[3]);
+
+        tree.ApplyCollapseRule(noTests.IsNeeded);
+        Assert(!testsFolder.IsExpanded && modelFolder.IsExpanded, "tests collapsed, manually collapsed code expanded");
+        Assert(tree.SelectedRow == testsFolder, "hidden selection moves to collapsed folder");
+        Assert(tree.Rows.All(row => row.File == null || !row.File.Path.Contains(".Tests")), "no test files visible");
+
+        tree.Toggle(testsFolder);
+        tree.ApplyCollapseRule(noTests.IsNeeded);
+        Assert(!testsFolder.IsExpanded, "reapply collapses manually expanded folder");
+
+        files[0].IsReviewed = true;
+        tree.ApplyCollapseRule(HgCollapseRule.Parse("U: unviewed -.Tests\\").IsNeeded);
+        Assert(!modelFolder.IsExpanded && !testsFolder.IsExpanded, "folder without unviewed files collapsed");
+        Assert(tree.Rows.Any(row => row.File == files[1]), "unviewed file visible");
+        Console.WriteLine("PASS: collapse rules parsing, matching, expand/collapse, selection.");
     }
 
     private static HgFileItem File(string path, string status)

@@ -147,6 +147,39 @@ namespace HgVs.ViewModels
             SelectedRow = selected;
         }
 
+        /// <summary>
+        /// Раскрывает папки, в которых есть нужные файлы, и сворачивает остальные.
+        /// Ручные раскрытия и сворачивания при этом сбрасываются.
+        /// </summary>
+        public void ApplyCollapseRule(Func<HgFileItem, bool> isNeeded)
+        {
+            if (_rebuildTimer.IsEnabled)
+            {
+                _rebuildTimer.Stop();
+                Rebuild();
+            }
+            foreach (var root in _roots) ApplyCollapseRule(root, isNeeded);
+
+            var selected = SelectedRow;
+            for (var parent = selected?.Parent; parent != null; parent = parent.Parent)
+                if (!parent.IsExpanded) selected = parent;
+            ReplaceVisibleRows();
+            SelectedRow = selected;
+        }
+
+        private bool ApplyCollapseRule(HgTreeRow row, Func<HgFileItem, bool> isNeeded)
+        {
+            if (!row.IsFolder) return isNeeded(row.File);
+
+            var hasNeeded = false;
+            foreach (var child in row.Children)
+                hasNeeded |= ApplyCollapseRule(child, isNeeded);
+            row.IsExpanded = hasNeeded;
+            if (hasNeeded) _collapsed.Remove(row.Key);
+            else _collapsed.Add(row.Key);
+            return hasNeeded;
+        }
+
         public HgTreeRow SelectFile(HgFileItem file)
         {
             if (file == null) return null;

@@ -53,6 +53,7 @@
     <Compile Include="Models\HgHistoryDiffMode.cs" />
     <Compile Include="ViewModels\HgHistoryToolWindowViewModel.cs" />
     <Compile Include="ViewModels\EnumToBooleanConverter.cs" />
+    <Compile Include="Models\HgCollapseRules.cs" />
     <Compile Include="Models\HgDisplayMode.cs" />
     <Compile Include="Models\HgFileItem.cs" />
     <Compile Include="Models\HgMergeBaseCandidate.cs" />
